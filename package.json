@@ -1,0 +1,14 @@
+{
+  "name": "discord-office", "version": "1.0.0", "private": true,
+  "workspaces": ["bot", "web"],
+  "scripts": {
+    "mock": "concurrently -k -n bot,web -c cyan,magenta \"npm run mock -w bot\" \"npm run dev -w web\"",
+    "dev": "concurrently -k -n bot,web -c cyan,magenta \"npm run dev -w bot\" \"npm run dev -w web\"",
+    "build": "npm run build -w bot && npm run build -w web",
+    "typecheck": "npm run typecheck -w bot && npm run typecheck -w web",
+    "test": "npm run test -w bot",
+    "start": "npm run start -w bot"
+  },
+  "devDependencies": { "concurrently": "^9.2.0", "typescript": "~5.9.3" },
+  "engines": { "node": ">=22.12.0" }
+}

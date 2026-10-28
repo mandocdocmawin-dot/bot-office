@@ -1,0 +1,30 @@
+{
+  "_comment": "Replace placeholder IDs with Discord channel IDs (Developer Mode > Copy Channel ID). _comment values are JSON-compatible comments.",
+  "server_name": "The Discord Office",
+  "channels": [
+    { "id": "RULES_CHANNEL_ID", "room": "Front Office", "_comment": "rules" },
+    { "id": "ANNOUNCEMENT_CHANNEL_ID", "room": "Front Office", "_comment": "announcement" },
+    { "id": "WELCOME_CHANNEL_ID", "room": "Front Office", "_comment": "welcome" },
+    { "id": "MILESTONE_CHANNEL_ID", "room": "Front Office", "_comment": "milestone" },
+    { "id": "ROLES_CHANNEL_ID", "room": "Front Office", "_comment": "roles" },
+    { "id": "GENERAL_TEXT_CHANNEL_ID", "room": "Commons", "_comment": "general (text)" },
+    { "id": "GENERAL_VOICE_CHANNEL_ID", "room": "Commons", "_comment": "general (voice)" },
+    { "id": "STUDY_CHANNEL_ID", "room": "Study Hall", "_comment": "study" },
+    { "id": "TECH_CHANNEL_ID", "room": "Tech Lab", "_comment": "tech" },
+    { "id": "GITHUB_CHANNEL_ID", "room": "Tech Lab", "_comment": "github-profiles-collection" },
+    { "id": "GAMING_CHANNEL_ID", "room": "Game Lounge", "_comment": "gaming" },
+    { "id": "CLIPS_CHANNEL_ID", "room": "Studio", "_comment": "clips" },
+    { "id": "ART_CHANNEL_ID", "room": "Studio", "_comment": "art" },
+    { "id": "SHARE_PROJECTS_FORUM_ID", "room": "Showcase", "_comment": "share-projects (forum parent, not an individual thread)" }
+  ],
+  "main_general_voice_channel_id": "GENERAL_VOICE_CHANNEL_ID",
+  "dynamic_voice_category_name": "CALL FOR VOICE",
+  "default_room_for_unmapped_channel": "Commons",
+  "idle_timeout_ms": 600000,
+  "message_stay_ms": 120000,
+  "new_member_stay_ms": 10000,
+  "bubble_enabled": true,
+  "bubble_duration_ms": 3000,
+  "bubble_max_chars": 40,
+  "offline_behavior": "hide"
+}
