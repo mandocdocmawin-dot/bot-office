@@ -1,116 +1,148 @@
 import Phaser from 'phaser';
-import type { Packet, Room, Snapshot } from '../../bot/src/protocol';
+import type { ClientPacket, Identity, Packet, Room, Snapshot } from '../../server/src/protocol';
 import { rooms, colorCSS } from './rooms';
 import { OfficeScene } from './scene';
 import './style.css';
+const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const api = (path: string) => `${apiBase}${path}`;
 const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = `
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="Discord Office home"><span class="brand-mark">◉</span><span>discord<span class="brand-light">office</span></span></a>
-    <span class="header-divider"></span><span id="server-name">The Discord Office</span>
-    <div class="top-right"><span class="connection" id="connection" role="status">Connecting</span><button id="help" class="icon-button" aria-label="About the office">?</button></div>
-  </header>
-  <div class="workspace">
-    <main>
-      <div class="page-heading"><div><h1>A little closer together.</h1><p>Your server, under one roof. See where everyone’s hanging out.</p></div><span class="mode" id="mode">Connecting</span></div>
-      <div class="map-shell"><div class="map-toolbar"><div><span class="live-dot"></span><strong>Office floor</strong><span class="floor-label">First floor</span></div><button id="fit" class="text-button">↗ Fit to view</button></div>
-        <div id="map" role="img" aria-label="Live top-down office. Use the room roster to read members and select rooms."></div>
-        <div id="map-notice" role="status" hidden></div>
-        <div class="map-bottom"><span>Drag to explore <span class="hint-dot">·</span> Scroll to zoom</span><div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><output id="zoom-value">100%</output><button id="zoom-in" aria-label="Zoom in">+</button></div></div>
-      </div>
-      <footer class="map-footer"><span><i class="legend-dot available"></i>Online <i class="legend-dot voice"></i>In voice <i class="legend-dot away"></i>Away <i class="legend-dot nap"></i>Napping</span><span id="update-time">Waiting for the office…</span></footer>
-    </main>
-    <aside aria-label="Office room roster"><div class="roster-heading"><h2>In the office</h2><span id="total">0</span></div><p class="roster-subtitle" id="roster-subtitle">Finding your people…</p>
-      <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a teammate" aria-label="Find a teammate"></label>
-      <button class="all-rooms" id="all-rooms">All rooms <span>↗</span></button><div id="roster"></div>
-      <div class="privacy-note"><span>◈</span><div><strong>Your space. Your choice.</strong><p>Use <code>/office action:optout</code> in Discord to hide from the map.</p><button id="bubbles" class="text-button" aria-pressed="true">Speech bubbles on</button></div></div>
-    </aside>
-  </div>
-  <dialog id="help-dialog"><button id="close-help" class="icon-button" aria-label="Close help">×</button><h2>Welcome to the office.</h2><p>Send a message to visit a room for two minutes. Join a voice channel to stay with the call. After ten quiet minutes, your character heads to the Nap Room.</p><p>Drag the floor to pan, scroll to zoom, or select a room in the roster. Fit to view resets the camera.</p><p>Message previews disappear after three seconds. Hide them with the speech bubbles control. To hide yourself from everyone, use <code>/office action:optout</code> in Discord. Use <code>/office action:optin</code> to return.</p><p id="mode-help"></p></dialog>`;
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const scene = new OfficeScene();
-new Phaser.Game({ type: Phaser.AUTO, parent: 'map', backgroundColor: '#111823', scene, scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' }, render: { antialias: true, roundPixels: false }, audio: { noAudio: true } });
-let snapshot: Snapshot | undefined;
-let selected: Room | undefined;
-let localBubbles = localStorage.getItem('office-bubbles') !== 'off';
-let query = '';
-function renderRoster() {
-  if (!snapshot) return;
-  const roster = el('roster'); roster.replaceChildren();
-  const total = snapshot.members.length;
-  el('total').textContent = String(total);
-  el('roster-subtitle').textContent = `${total} ${total === 1 ? 'teammate' : 'teammates'} across 9 rooms`;
-  let results = 0;
-  for (const room of rooms) {
-    const all = snapshot.members.filter(m => m.room === room.name);
-    const members = all.filter(m => m.username.toLocaleLowerCase().includes(query));
-    if (query && !members.length) continue;
-    if (selected && selected !== room.name) continue;
-    const section = document.createElement('section'); section.className = 'room-section';
-    const button = document.createElement('button'); button.className = 'room-button'; button.style.setProperty('--room-color', colorCSS(room.color));
-    button.setAttribute('aria-pressed', String(selected === room.name));
-    const dot = document.createElement('i'); dot.className = 'room-dot';
-    const name = document.createElement('span'); name.textContent = room.name;
-    const count = document.createElement('span'); count.className = 'room-count'; count.textContent = String(all.length);
-    button.append(dot, name, count); button.onclick = () => selectRoom(selected === room.name ? undefined : room.name);
-    section.append(button);
-    if (!members.length) { const empty = document.createElement('p'); empty.className = 'empty-room'; empty.textContent = 'Room for a little company'; section.append(empty); }
-    for (const member of members) {
-      results++;
-      const row = document.createElement('div'); row.className = `member-row ${member.presence === 'offline' ? 'offline' : ''}`;
-      const avatar = document.createElement('span'); avatar.className = 'roster-avatar'; avatar.textContent = Array.from(member.username)[0] ?? '?';
-      if (member.avatar) { const img = document.createElement('img'); img.src = member.avatar; img.alt = ''; img.loading = 'lazy'; img.onerror = () => img.remove(); avatar.append(img); }
-      const label = document.createElement('span'); label.className = 'member-name'; label.textContent = member.username;
-      const state = document.createElement('span'); state.className = `member-state ${member.inVoice ? 'voice-text' : ''}`; state.textContent = member.sleeping ? 'Zzz' : member.inVoice ? 'In voice' : member.presence === 'online' ? '' : member.presence === 'dnd' ? 'Busy' : member.presence;
-      row.append(avatar, label, state); section.append(row);
+async function boot() {
+  if (new URLSearchParams(location.search).has('logged_out')) { login(); return; }
+  try {
+    const response = await fetch(api('/api/session'), { credentials: 'include' });
+    if (!response.ok) throw new Error('Session unavailable');
+    const session = await response.json() as { user: Identity | null; mode: string };
+    if (!session.user) { login(); return; }
+    office(session.user, session.mode === 'mock');
+  } catch { login('The office server is unavailable. Start npm run mock or npm run dev, then try again.'); }
+}
+function login(error?: string) {
+  const messages: Record<string, string> = { not_member: 'You must be a member of the server', cancelled: 'Discord sign-in was cancelled. You can try again.', invalid_state: 'Your sign-in link expired. Please try again.', failed: 'Discord sign-in failed. Check the application settings and try again.' };
+  const code = new URLSearchParams(location.search).get('login_error') ?? '';
+  app.innerHTML = `<main class="login-page"><div class="login-card"><div class="brand"><span class="brand-mark">◉</span>discord office</div><h1>Your people.<br>Your little office.</h1><p>A shared space to work, wander, and hang out with your Discord server.</p><p id="login-error" role="alert"></p><a id="discord-login" class="login-button">Continue with Discord</a><p class="login-privacy">We request only your profile and server list to verify membership. Your display name, avatar, and position appear to people in this office. Room chat disappears after five seconds and is never stored or logged. Log out any time.</p><button class="text-button" id="retry">Refresh connection</button></div><div class="login-art" aria-hidden="true"><span>⌂</span><p>One server. Under one roof.</p></div></main>`;
+  el('login-error').textContent = error || messages[code] || '';
+  el<HTMLAnchorElement>('discord-login').href = api('/auth/login');
+  el('retry').onclick = () => location.reload();
+}
+function office(user: Identity, mock: boolean) {
+  app.innerHTML = `
+  <header class="topbar"><a class="brand" href="/" aria-label="Discord Office home"><span class="brand-mark">◉</span><span>discord<span class="brand-light">office</span></span></a><span class="header-divider"></span><span id="server-name">The Discord Office</span><div class="top-right"><span class="connection" id="connection" role="status">Connecting</span><button id="logout" class="text-button">Log out</button><button id="help" class="icon-button" aria-label="About the office">?</button></div></header>
+  <div class="workspace"><main><div class="page-heading"><div><h1>A little closer together.</h1><p>Your character. Your pace. Make yourself at home.</p></div><span class="mode demo" id="mode">${mock ? 'Demo office' : 'Live office'}</span></div>
+  <div class="map-shell"><div class="map-toolbar"><div><span class="live-dot"></span><strong>Office floor</strong><span class="floor-label">Isometric view</span></div><div class="map-actions"><button id="focus-self" class="text-button">Find me</button><button id="expand" class="text-button">Expand</button><button id="fit" class="text-button">↗ Fit to view</button></div></div>
+  <div id="map" role="img" aria-label="Multiplayer isometric office. Click the floor to walk; drag to pan. Use the roster to focus on a player."></div><div id="map-notice" role="status" hidden></div>
+  <div class="play-dock"><button id="chat-open" aria-label="Open room chat">Chat <kbd>Enter</kbd></button><span class="emote-buttons">${['👋', '❤️', '😂', '🎉', '☕'].map((e, i) => `<button class="emote" data-index="${i}" aria-label="Emote ${i + 1}">${e}</button>`).join('')}</span><span id="room-hint">Front Office</span></div>
+  <form id="chat-form" hidden><label for="chat-input">Room chat</label><input id="chat-input" autocomplete="off" placeholder="Say something to this room…" maxlength="160"><span id="chat-count">0/80</span><button>Send</button><button id="chat-close" type="button" aria-label="Close chat">×</button></form>
+  <div class="map-bottom"><span>WASD / arrows to walk · Click to move · Drag to pan</span><div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><output id="zoom-value">100%</output><button id="zoom-in" aria-label="Zoom in">+</button></div></div></div>
+  <footer class="map-footer"><span><i class="legend-dot voice"></i>Online <i class="legend-dot nap"></i>Napping · Emotes 1–5</span><span id="update-time">Connecting…</span></footer></main>
+  <aside aria-label="Office room roster"><div class="roster-heading"><h2>In the office</h2><span id="total">0</span></div><p class="roster-subtitle" id="roster-subtitle">Finding your people…</p><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a teammate" aria-label="Find a teammate"></label><button class="all-rooms" id="all-rooms">All rooms <span>↗</span></button><div id="roster"></div><div class="privacy-note"><span>◈</span><div><strong>Only here while you are.</strong><p>Only connected players appear. Room chat is transient. Log out to leave.</p><button id="bubbles" class="text-button" aria-pressed="true">Speech bubbles on</button></div></div></aside></div>
+  <dialog id="help-dialog"><button id="close-help" class="icon-button" aria-label="Close help">×</button><h2>Make yourself at home.</h2><p>Use WASD or arrow keys to walk. Click the floor to find a path through doors. Walls and furniture block movement. Drag to pan and scroll to zoom.</p><p>Press Enter to chat with the people in your current room. Press 1–5 for a quick emote. Chat bubbles disappear after five seconds.</p><p>After ten minutes without input, you move to the Nap Room. Any input wakes you. Click a name in the roster to follow them, or use Find me. Log out to leave.</p><p>${mock ? 'This is a demo with fictional players. You can walk and chat without Discord login.' : 'You signed in with Discord. Server membership is checked during login.'}</p></dialog>`;
+  const scene = new OfficeScene();
+  new Phaser.Game({ type: Phaser.AUTO, parent: 'map', backgroundColor: '#09070f', scene, scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' }, render: { antialias: true }, audio: { noAudio: true } });
+  let snapshot: Snapshot | undefined, selected: Room | undefined, query = '', selfId = user.id;
+  let localBubbles = localStorage.getItem('office-bubbles') !== 'off';
+  let socket: WebSocket, retry = 0, stopped = false, rosterKey = '', chatVisible = false;
+  const keys = new Set<string>(); let lastDirection = '';
+  const send = (packet: ClientPacket) => { if (socket?.readyState === WebSocket.OPEN && !stopped) socket.send(JSON.stringify(packet)); };
+  function renderRoster(force = false) {
+    if (!snapshot) return;
+    const key = JSON.stringify(snapshot.members.map(m => [m.id, m.username, m.avatar, m.room, m.sleeping]));
+    if (!force && rosterKey === key) return; rosterKey = key;
+    const roster = el('roster'), scroll = roster.scrollTop; roster.replaceChildren();
+    el('total').textContent = String(snapshot.members.length);
+    el('roster-subtitle').textContent = `${snapshot.members.length} players across 9 rooms`;
+    let results = 0;
+    for (const room of rooms) {
+      const all = snapshot.members.filter(m => m.room === room.name), members = all.filter(m => m.username.toLocaleLowerCase().includes(query));
+      if ((query && !members.length) || (selected && selected !== room.name)) continue;
+      const section = document.createElement('section'); section.className = 'room-section';
+      const button = document.createElement('button'); button.className = 'room-button'; button.style.setProperty('--room-color', colorCSS(room.color)); button.setAttribute('aria-pressed', String(selected === room.name));
+      const dot = document.createElement('i'); dot.className = 'room-dot'; const name = document.createElement('span'); name.textContent = room.name;
+      const count = document.createElement('span'); count.className = 'room-count'; count.textContent = String(all.length); button.append(dot, name, count);
+      button.onclick = () => { selected = selected === room.name ? undefined : room.name; scene.select(selected); renderRoster(true); }; section.append(button);
+      if (!members.length) { const empty = document.createElement('p'); empty.className = 'empty-room'; empty.textContent = 'Room for a little company'; section.append(empty); }
+      for (const member of members) {
+        results++; const row = document.createElement('button'); row.type = 'button'; row.className = 'member-row'; row.title = `Follow ${member.username}`; row.onclick = () => scene.focus(member.id);
+        const avatar = document.createElement('span'); avatar.className = 'roster-avatar'; avatar.textContent = Array.from(member.username)[0] ?? '?';
+        if (member.avatar) { const img = document.createElement('img'); img.src = member.avatar; img.alt = ''; img.loading = 'lazy'; img.onerror = () => img.remove(); avatar.append(img); }
+        const label = document.createElement('span'); label.className = 'member-name'; label.textContent = member.username + (member.id === selfId ? ' (you)' : '');
+        const state = document.createElement('span'); state.className = 'member-state'; state.textContent = member.sleeping ? 'Zzz' : ''; row.append(avatar, label, state); section.append(row);
+      }
+      roster.append(section);
     }
-    roster.append(section);
+    if (!results && query) { const empty = document.createElement('p'); empty.className = 'no-results'; empty.textContent = 'No matching teammates.'; roster.append(empty); }
+    el('all-rooms').classList.toggle('filtered', !!selected); roster.scrollTop = scroll;
   }
-  if (!results && query) { const empty = document.createElement('p'); empty.className = 'no-results'; empty.textContent = `No teammates match “${el<HTMLInputElement>('search').value}”.`; roster.append(empty); }
-  el('all-rooms').classList.toggle('filtered', !!selected);
-}
-function selectRoom(room?: Room) { selected = room; scene.select(room); renderRoster(); }
-function renderBubbleControl() {
-  const enabled = localBubbles && snapshot?.config.bubbleEnabled !== false;
-  el('bubbles').textContent = snapshot?.config.bubbleEnabled === false ? 'Speech bubbles disabled by server' : `Speech bubbles ${enabled ? 'on' : 'off'}`;
-  el('bubbles').setAttribute('aria-pressed', String(enabled));
-}
-el('search').addEventListener('input', () => { query = el<HTMLInputElement>('search').value.trim().toLocaleLowerCase(); renderRoster(); });
-el('all-rooms').onclick = () => selectRoom();
-el('fit').onclick = () => scene.fit(); el('zoom-in').onclick = () => scene.zoom(0.2); el('zoom-out').onclick = () => scene.zoom(-0.2);
-el('bubbles').onclick = () => { localBubbles = !localBubbles; localStorage.setItem('office-bubbles', localBubbles ? 'on' : 'off'); if (!localBubbles) scene.clearBubbles(); renderBubbleControl(); };
-el('help').onclick = () => el<HTMLDialogElement>('help-dialog').showModal();
-el('close-help').onclick = () => el<HTMLDialogElement>('help-dialog').close();
-window.addEventListener('office-room', event => selectRoom((event as CustomEvent<Room>).detail));
-window.addEventListener('office-zoom', event => { el('zoom-value').textContent = `${(event as CustomEvent<number>).detail}%`; });
-renderBubbleControl();
-let socket: WebSocket;
-let retry = 0;
-function connect() {
-  const url = import.meta.env.VITE_WS_URL || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
-  socket = new WebSocket(url);
-  socket.onopen = () => { retry = 0; el('connection').textContent = 'Connected'; el('connection').classList.add('connected'); };
-  socket.onmessage = event => {
-    let packet: Packet;
-    try { packet = JSON.parse(event.data); if (!packet.state || !Array.isArray(packet.state.members)) return; } catch { return; }
-    snapshot = packet.state;
-    scene.sync(snapshot); renderRoster(); renderBubbleControl();
-    el('server-name').textContent = snapshot.config.serverName;
-    el('mode').textContent = snapshot.mode === 'mock' ? 'Demo office' : 'Live office';
-    el('mode').classList.toggle('demo', snapshot.mode === 'mock');
-    el('map-notice').hidden = snapshot.ready;
-    el('map-notice').textContent = 'Connecting to Discord and fetching members…';
-    el('mode-help').textContent = snapshot.mode === 'mock' ? 'You’re viewing a demo with fictional teammates. Events run every few seconds. Start the real bot to see your server.' : 'This office reflects your Discord server. Members who opt out are excluded from the map and roster.';
-    el('update-time').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    if (packet.type !== 'snapshot' && packet.memberId && packet.bubble && localBubbles && snapshot.config.bubbleEnabled) scene.speak(packet.memberId, packet.bubble, snapshot.config.bubbleDurationMs);
+  function bubbleControl() { const enabled = localBubbles && snapshot?.config.bubbleEnabled !== false; el('bubbles').textContent = `Speech bubbles ${enabled ? 'on' : 'off'}`; el('bubbles').setAttribute('aria-pressed', String(enabled)); }
+  function closeChat() { chatVisible = false; el('chat-form').hidden = true; el<HTMLInputElement>('chat-input').blur(); }
+  function openChat() { if (stopped) return; chatVisible = true; keys.clear(); send({ type: 'input', dx: 0, dy: 0 }); send({ type: 'wake' }); el('chat-form').hidden = false; el<HTMLInputElement>('chat-input').focus(); }
+  el('chat-open').onclick = openChat; el('chat-close').onclick = closeChat;
+  el('chat-form').onsubmit = event => { event.preventDefault(); const input = el<HTMLInputElement>('chat-input'), text = Array.from(input.value.trim()).slice(0, 80).join(''); if (text) send({ type: 'chat', text }); input.value = ''; el('chat-count').textContent = '0/80'; closeChat(); };
+  el<HTMLInputElement>('chat-input').oninput = () => { const input = el<HTMLInputElement>('chat-input'); input.value = Array.from(input.value).slice(0, 80).join(''); el('chat-count').textContent = `${Array.from(input.value).length}/80`; send({ type: 'wake' }); };
+  el('search').addEventListener('input', () => { query = el<HTMLInputElement>('search').value.trim().toLocaleLowerCase(); renderRoster(true); });
+  el('all-rooms').onclick = () => { selected = undefined; scene.select(); renderRoster(true); };
+  el('fit').onclick = () => scene.fit(); el('zoom-in').onclick = () => scene.zoom(.2); el('zoom-out').onclick = () => scene.zoom(-.2); el('focus-self').onclick = () => scene.focus(selfId);
+  el('expand').onclick = () => { const full = document.querySelector('.map-shell')!.classList.toggle('expanded'); el('expand').textContent = full ? 'Close view' : 'Expand'; };
+  el('bubbles').onclick = () => { localBubbles = !localBubbles; localStorage.setItem('office-bubbles', localBubbles ? 'on' : 'off'); if (!localBubbles) scene.clearBubbles(); bubbleControl(); };
+  el('help').onclick = () => el<HTMLDialogElement>('help-dialog').showModal(); el('close-help').onclick = () => el<HTMLDialogElement>('help-dialog').close();
+  el('logout').onclick = async () => {
+    const button = el<HTMLButtonElement>('logout'); button.disabled = true;
+    try { const response = await fetch(api('/auth/logout'), { method: 'POST', credentials: 'include' }); if (!response.ok) throw new Error('Logout failed'); stopped = true; keys.clear(); socket?.close(); location.href = '/?logged_out=1'; }
+    catch { button.disabled = false; el('map-notice').hidden = false; el('map-notice').textContent = 'Could not end your session. Check the connection and try Log out again.'; }
   };
-  socket.onclose = () => {
-    el('connection').textContent = 'Reconnecting'; el('connection').classList.remove('connected');
-    el('map-notice').hidden = false;
-    el('map-notice').textContent = snapshot ? 'Connection lost. Showing the last known office. Reconnecting…' : 'The office is offline. Start npm run mock or npm run dev to connect.';
-    scene.clearBubbles();
-    setTimeout(connect, Math.min(1000 * 2 ** retry++, 15000));
-  };
-  socket.onerror = () => socket.close();
+  document.querySelectorAll<HTMLButtonElement>('.emote').forEach(button => { button.onclick = () => send({ type: 'emote', index: Number(button.dataset.index) }); });
+  window.addEventListener('office-move', event => { if (!chatVisible) { const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail; keys.clear(); lastDirection = '0:0'; send({ type: 'move_to', x, y }); } });
+  window.addEventListener('office-zoom', event => { el('zoom-value').textContent = `${(event as CustomEvent<number>).detail}%`; });
+  const movementKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+  let lastActivitySignal = 0;
+  const activitySignal = () => { if (Date.now() - lastActivitySignal > 900) { lastActivitySignal = Date.now(); send({ type: 'wake' }); } };
+  window.addEventListener('pointerdown', activitySignal); window.addEventListener('wheel', activitySignal, { passive: true }); window.addEventListener('keydown', activitySignal);
+  window.addEventListener('keydown', event => {
+    const target = event.target as HTMLElement; const typing = ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable;
+    const key = event.key.toLowerCase();
+    if (key === 'escape') { closeChat(); document.querySelector('.map-shell')!.classList.remove('expanded'); el('expand').textContent = 'Expand'; return; }
+    if (typing || el<HTMLDialogElement>('help-dialog').open) return;
+    if (key === 'enter') { event.preventDefault(); openChat(); return; }
+    if (movementKeys.includes(key)) { event.preventDefault(); keys.add(key); }
+    else if (/^[1-5]$/.test(key) && !event.repeat) send({ type: 'emote', index: Number(key) - 1 });
+    else if (!event.repeat) send({ type: 'wake' });
+  });
+  window.addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
+  const stopMovement = () => { keys.clear(); lastDirection = ''; send({ type: 'input', dx: 0, dy: 0 }); };
+  window.addEventListener('blur', stopMovement); document.addEventListener('visibilitychange', () => { if (document.hidden) stopMovement(); });
+  setInterval(() => {
+    const up = keys.has('w') || keys.has('arrowup'), down = keys.has('s') || keys.has('arrowdown'), left = keys.has('a') || keys.has('arrowleft'), right = keys.has('d') || keys.has('arrowright');
+    const sx = Number(right) - Number(left), sy = Number(down) - Number(up);
+    const dx = (sx + sy) / Math.SQRT2, dy = (sy - sx) / Math.SQRT2, length = Math.max(1, Math.hypot(dx, dy));
+    const direction = `${dx}:${dy}`;
+    if (sx || sy || (lastDirection && direction !== lastDirection)) send({ type: 'input', dx: dx / length, dy: dy / length });
+    lastDirection = direction;
+  }, 70);
+  function connect() {
+    if (stopped) return;
+    const relative = new URL(api('/ws'), location.href); relative.protocol = relative.protocol === 'https:' ? 'wss:' : 'ws:';
+    const configured = import.meta.env.VITE_WS_URL;
+    const wsUrl = configured ? new URL(configured, relative) : relative;
+    if (wsUrl.protocol === 'http:') wsUrl.protocol = 'ws:'; if (wsUrl.protocol === 'https:') wsUrl.protocol = 'wss:';
+    socket = new WebSocket(wsUrl);
+    socket.onopen = () => { retry = 0; scene.setFrozen(false); el('connection').textContent = 'Connected'; el('connection').classList.add('connected'); el('map-notice').hidden = true; };
+    socket.onmessage = event => {
+      let packet: Packet; try { packet = JSON.parse(event.data); } catch { return; }
+      if (packet.type === 'bubble') { if (localBubbles && snapshot?.members.find(m => m.id === selfId)?.room === packet.room) scene.speak(packet.memberId, packet.text, packet.duration); return; }
+      if (packet.type === 'error') return;
+      snapshot = packet.state; if (packet.type === 'snapshot') { selfId = packet.selfId; scene.setSelf(selfId); }
+      scene.sync(snapshot); renderRoster(); bubbleControl();
+      el('server-name').textContent = snapshot.config.serverName;
+      el('room-hint').textContent = snapshot.members.find(m => m.id === selfId)?.room ?? 'Office';
+      el('update-time').textContent = mock ? 'Demo · move around and try the controls' : 'Live · 20 updates / second';
+    };
+    socket.onclose = event => {
+      scene.setFrozen(true); scene.clearBubbles(); keys.clear(); el('connection').classList.remove('connected'); el('map-notice').hidden = false;
+      if ([4000, 4001, 4008, 1008].includes(event.code)) { stopped = true; el('connection').textContent = 'Disconnected'; el('map-notice').textContent = event.code === 4000 ? 'This account opened another tab. This tab has stopped. Reload to play here.' : event.code === 4001 ? 'Your session ended. Refresh to sign in again.' : 'Connection closed: invalid or excessive input. Refresh to reconnect.'; return; }
+      el('connection').textContent = 'Reconnecting'; el('map-notice').textContent = 'Connection lost. Reconnecting to the office…';
+      if (!stopped) setTimeout(async () => { const response = await fetch(api('/api/session'), { credentials: 'include' }).catch(() => null); if (response?.ok && !(await response.json()).user) { location.reload(); return; } connect(); }, Math.min(1000 * 2 ** retry++, 15000));
+    }; socket.onerror = () => socket.close();
+  }
+  bubbleControl(); connect();
 }
-connect();
+void boot();

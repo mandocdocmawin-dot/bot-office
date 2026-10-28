@@ -1,7 +1,7 @@
-# Discord Office
+# Discord Office visual system
 
-An inhabited floor plan is the primary interface. The server's nine rooms form a symmetrical footprint: reception at the north, Commons at the heart, quieter and specialized spaces around it. The roster provides a readable alternative to the spatial view.
+The existing nine-room layout is a miniature isometric office on a raised cutaway platform, matching the supplied game-office reference. Neon rear rails identify rooms; door openings and corridor diamonds show where to walk. Desks have monitors and chairs; the studio has easels, the study has bookshelves, and Nap Room has beds. Geometry and colors come from config.json. No raster backdrop substitutes for the live map.
 
-Base colors: ink #10151e, panel #141b26, floor #111823, text #e8edf5, secondary #8d99ac, interface accent #b6bafa. Each room has its own muted neon border, repeated in the roster. Manrope supplies the friendly headings; DM Sans handles names and controls, with sans-serif fallbacks. Furniture is drawn in Phaser and kept against room edges so members have a clear activity area.
+The existing dark shell, Manrope headings, DM Sans controls, camera, search and grouped roster remain. Character bodies use simple block geometry with each Discord avatar as the face. Depth sorting follows projected ground position. Interpolated server positions and a small walking bob communicate movement. Reduced-motion preference removes the bob and positional interpolation.
 
-The floor occupies most of the screen. The right roster stays visible on desktop and moves below the map on mobile. Room labels, counts, presence indicators, and local bubble controls remain real interface content. Character motion communicates Discord activity; reduced-motion preference disables walking travel. No decorative entrance animations.
+The map is the primary interface. Expand makes it fill the browser; Find me and roster names follow a player. Mouse/touch click-to-move supports smaller screens. Room chat is a small transient input panel, not a message history. Login explains exactly what profile data appears and that chat is never stored.
