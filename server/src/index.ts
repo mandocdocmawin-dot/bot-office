@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import dotenv from 'dotenv';
 import { ROOT, loadConfig } from './config.js';
 import { createOfficeServer } from './app.js';
+import { startDiscord } from './discord.js';
 dotenv.config({ path: resolve(ROOT, '.env'), quiet: true });
 const mock = process.argv.includes('--mock'), port = Number(process.env.PORT ?? 3001);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
@@ -17,6 +18,11 @@ const app = createOfficeServer(loadConfig(), {
   clientId: process.env.DISCORD_CLIENT_ID ?? '', clientSecret: process.env.DISCORD_CLIENT_SECRET ?? '', redirectUri: process.env.DISCORD_REDIRECT_URI ?? '',
   guildId: process.env.GUILD_ID ?? '', secret: mock ? randomBytes(32).toString('hex') : process.env.SESSION_SECRET!, webUrl: (process.env.WEB_URL ?? 'http://localhost:5173').replace(/\/$/, ''), mock
 });
-app.server.on('error', error => { console.error(error.message); void app.close(); process.exitCode = 1; });
-app.server.listen(port, process.env.HOST ?? '127.0.0.1', () => console.log(`Office ${mock ? 'mock' : 'multiplayer'} server: http://localhost:${port}`));
-process.once('SIGINT', () => { void app.close(); }); process.once('SIGTERM', () => { void app.close(); });
+let stopDiscord: (() => void) | undefined;
+const shutdown = () => { stopDiscord?.(); void app.close(); };
+app.server.on('error', error => { console.error(error.message); shutdown(); process.exitCode = 1; });
+app.server.listen(port, process.env.HOST ?? '127.0.0.1', () => {
+  console.log(`Office ${mock ? 'mock' : 'multiplayer'} server: http://localhost:${port}`);
+  if (!mock) stopDiscord = startDiscord(app.office, process.env.DISCORD_TOKEN, process.env.GUILD_ID!, id => app.auth.revokeUser(id));
+});
+process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);

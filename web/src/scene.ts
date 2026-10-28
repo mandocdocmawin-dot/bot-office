@@ -15,6 +15,9 @@ export class OfficeScene extends Phaser.Scene {
   private built = false;
   private fitZoom = 1;
   private zoomFactor = 1;
+  private autoFit = true;
+  private viewportWidth = 0;
+  private viewportHeight = 0;
   private selected?: Room;
   private outlines = new Map<Room, Phaser.GameObjects.Graphics>();
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -73,11 +76,25 @@ export class OfficeScene extends Phaser.Scene {
     slab(beacon, 468, 490, 35, 35, 15, 15, 0x39384d);
     beacon.fillStyle(0x7de7db, 0.13).fillCircle(hub.x, hub.y - 40, 30);
     beacon.fillStyle(0x73d6d1).fillCircle(hub.x, hub.y - 40, 19); beacon.fillStyle(0xb8fff0).fillEllipse(hub.x - 6, hub.y - 47, 10, 12);
-    this.fit(); this.scale.on('resize', () => this.fit());
-    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => this.zoom(dy > 0 ? -0.15 : 0.15));
+    this.fit();
+    const resize = () => this.resizeView();
+    this.scale.on('resize', resize);
+    // Own the canvas wheel event so the page cannot scroll or browser-zoom
+    // instead of moving the office camera. Trackpads use small pixel deltas.
+    const canvas = this.game.canvas;
+    const wheel = (event: WheelEvent) => {
+      if (!event.deltaY) return;
+      event.preventDefault();
+      const bounds = canvas.getBoundingClientRect();
+      const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? bounds.height : 1);
+      const change = -Math.sign(pixels) * Math.min(.4, Math.max(.025, Math.abs(pixels) * .002));
+      this.zoom(change, { x: (event.clientX - bounds.left) * this.scale.width / bounds.width, y: (event.clientY - bounds.top) * this.scale.height / bounds.height });
+    };
+    canvas.addEventListener('wheel', wheel, { passive: false });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { canvas.removeEventListener('wheel', wheel); this.scale.off('resize', resize); });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!p.isDown) return;
-      if (Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) > 6) this.cameras.main.stopFollow();
+      if (Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) > 6) { this.autoFit = false; this.cameras.main.stopFollow(); }
       this.cameras.main.scrollX -= (p.x - p.prevPosition.x) / this.cameras.main.zoom;
       this.cameras.main.scrollY -= (p.y - p.prevPosition.y) / this.cameras.main.zoom;
     });
@@ -132,14 +149,37 @@ export class OfficeScene extends Phaser.Scene {
   }
   fit() {
     if (!this.built) return;
+    this.autoFit = true;
+    this.viewportWidth = this.scale.width; this.viewportHeight = this.scale.height;
     this.fitZoom = Math.min(this.scale.width / WORLD_WIDTH, this.scale.height / WORLD_HEIGHT) * 0.96; this.zoomFactor = 1;
     this.cameras.main.setZoom(this.fitZoom).centerOn(WORLD_WIDTH / 2 - 25, WORLD_HEIGHT / 2 - 12); this.reportZoom();
     this.cameras.main.stopFollow();
   }
-  zoom(delta: number) { this.zoomFactor = Phaser.Math.Clamp(this.zoomFactor + delta, 0.65, 4); this.cameras.main.setZoom(this.fitZoom * this.zoomFactor); this.reportZoom(); }
+  private resizeView() {
+    if (!this.built || (this.viewportWidth === this.scale.width && this.viewportHeight === this.scale.height)) return;
+    if (this.autoFit) { this.fit(); return; }
+    const camera = this.cameras.main, center = { x: camera.midPoint.x, y: camera.midPoint.y };
+    this.viewportWidth = this.scale.width; this.viewportHeight = this.scale.height;
+    this.fitZoom = Math.min(this.scale.width / WORLD_WIDTH, this.scale.height / WORLD_HEIGHT) * 0.96;
+    camera.setZoom(this.fitZoom * this.zoomFactor).centerOn(center.x, center.y);
+    this.reportZoom();
+  }
+  zoom(delta: number, anchor?: { x: number; y: number }) {
+    if (!this.built || !Number.isFinite(delta)) return;
+    const camera = this.cameras.main, oldZoom = camera.zoom;
+    this.autoFit = false; camera.stopFollow();
+    this.zoomFactor = Phaser.Math.Clamp(this.zoomFactor + delta, .5, 6);
+    const nextZoom = this.fitZoom * this.zoomFactor;
+    camera.setZoom(nextZoom);
+    if (anchor) {
+      camera.scrollX += (anchor.x - camera.width / 2) * (1 / oldZoom - 1 / nextZoom);
+      camera.scrollY += (anchor.y - camera.height / 2) * (1 / oldZoom - 1 / nextZoom);
+    }
+    this.reportZoom();
+  }
   private reportZoom() { window.dispatchEvent(new CustomEvent('office-zoom', { detail: Math.round(this.zoomFactor * 100) })); }
   select(room?: Room) { this.selected = room; for (const [name, outline] of this.outlines) outline.setVisible(name === room); }
-  focus(id: string) { const c = this.people.get(id); if (c) { this.cameras.main.setZoom(Math.max(this.fitZoom * 1.8, this.cameras.main.zoom)); this.zoomFactor = this.cameras.main.zoom / this.fitZoom; this.reportZoom(); this.cameras.main.startFollow(c.root, false, .12, .12); } }
+  focus(id: string) { const c = this.people.get(id); if (c) { this.autoFit = false; this.cameras.main.setZoom(Math.max(this.fitZoom * 1.8, this.cameras.main.zoom)); this.zoomFactor = this.cameras.main.zoom / this.fitZoom; this.reportZoom(); this.cameras.main.startFollow(c.root, false, .12, .12); } }
   setSelf(id: string) { this.selfId = id; }
   setFrozen(value: boolean) { this.frozen = value; }
   sync(state: Snapshot) {
@@ -160,6 +200,7 @@ export class OfficeScene extends Phaser.Scene {
         const avatarChanged = c.member.avatar !== m.avatar; c.member = m; if (avatarChanged) this.loadAvatar(c, m);
         c.name.setText(this.shortName(m.username) + (m.id === this.selfId ? ' (you)' : ''));
         c.status.setFillStyle(m.sleeping ? 0xc1afed : 0x7ed7ad);
+        c.root.setAlpha(m.presence === 'offline' ? .5 : 1);
         c.zzz.setVisible(m.sleeping); c.bubble?.setVisible(!m.sleeping && m.room === ownRoom);
       });
     }

@@ -28,29 +28,30 @@ function login(error?: string) {
 function office(user: Identity, mock: boolean) {
   app.innerHTML = `
   <header class="topbar"><a class="brand" href="/" aria-label="Discord Office home"><span class="brand-mark">◉</span><span>discord<span class="brand-light">office</span></span></a><span class="header-divider"></span><span id="server-name">The Discord Office</span><div class="top-right"><span class="connection" id="connection" role="status">Connecting</span><button id="logout" class="text-button">Log out</button><button id="help" class="icon-button" aria-label="About the office">?</button></div></header>
-  <div class="workspace"><main><div class="page-heading"><div><h1>A little closer together.</h1><p>Your character. Your pace. Make yourself at home.</p></div><span class="mode demo" id="mode">${mock ? 'Demo office' : 'Live office'}</span></div>
+  <div class="workspace"><main><div class="page-heading"><div><h1>A little closer together.</h1><p id="office-description">Your character. Your pace. Make yourself at home.</p></div><span class="mode demo" id="mode">${mock ? 'Demo office' : 'Live office'}</span></div><p id="discord-status" role="status" hidden></p>
   <div class="map-shell"><div class="map-toolbar"><div><span class="live-dot"></span><strong>Office floor</strong><span class="floor-label">Isometric view</span></div><div class="map-actions"><button id="focus-self" class="text-button">Find me</button><button id="expand" class="text-button">Expand</button><button id="fit" class="text-button">↗ Fit to view</button></div></div>
   <div id="map" role="img" aria-label="Multiplayer isometric office. Click the floor to walk; drag to pan. Use the roster to focus on a player."></div><div id="map-notice" role="status" hidden></div>
   <div class="play-dock"><button id="chat-open" aria-label="Open room chat">Chat <kbd>Enter</kbd></button><span class="emote-buttons">${['👋', '❤️', '😂', '🎉', '☕'].map((e, i) => `<button class="emote" data-index="${i}" aria-label="Emote ${i + 1}">${e}</button>`).join('')}</span><span id="room-hint">Front Office</span></div>
   <form id="chat-form" hidden><label for="chat-input">Room chat</label><input id="chat-input" autocomplete="off" placeholder="Say something to this room…" maxlength="160"><span id="chat-count">0/80</span><button>Send</button><button id="chat-close" type="button" aria-label="Close chat">×</button></form>
-  <div class="map-bottom"><span>WASD / arrows to walk · Click to move · Drag to pan</span><div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><output id="zoom-value">100%</output><button id="zoom-in" aria-label="Zoom in">+</button></div></div></div>
+  <div class="map-bottom"><span id="movement-hint">WASD / arrows to walk · Click to move · Drag to pan</span><div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><output id="zoom-value">100%</output><button id="zoom-in" aria-label="Zoom in">+</button></div></div></div>
   <footer class="map-footer"><span><i class="legend-dot voice"></i>Online <i class="legend-dot nap"></i>Napping · Emotes 1–5</span><span id="update-time">Connecting…</span></footer></main>
-  <aside aria-label="Office room roster"><div class="roster-heading"><h2>In the office</h2><span id="total">0</span></div><p class="roster-subtitle" id="roster-subtitle">Finding your people…</p><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a teammate" aria-label="Find a teammate"></label><button class="all-rooms" id="all-rooms">All rooms <span>↗</span></button><div id="roster"></div><div class="privacy-note"><span>◈</span><div><strong>Only here while you are.</strong><p>Only connected players appear. Room chat is transient. Log out to leave.</p><button id="bubbles" class="text-button" aria-pressed="true">Speech bubbles on</button></div></div></aside></div>
-  <dialog id="help-dialog"><button id="close-help" class="icon-button" aria-label="Close help">×</button><h2>Make yourself at home.</h2><p>Use WASD or arrow keys to walk. Click the floor to find a path through doors. Walls and furniture block movement. Drag to pan and scroll to zoom.</p><p>Press Enter to chat with the people in your current room. Press 1–5 for a quick emote. Chat bubbles disappear after five seconds.</p><p>After ten minutes without input, you move to the Nap Room. Any input wakes you. Click a name in the roster to follow them, or use Find me. Log out to leave.</p><p>${mock ? 'This is a demo with fictional players. You can walk and chat without Discord login.' : 'You signed in with Discord. Server membership is checked during login.'}</p></dialog>`;
+  <aside aria-label="Office room roster"><div class="roster-heading"><h2>In the office</h2><span id="total">0</span></div><p class="roster-subtitle" id="roster-subtitle">Finding your people…</p><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a teammate" aria-label="Find a teammate"></label><button class="all-rooms" id="all-rooms">All rooms <span>↗</span></button><div id="roster"></div><div class="privacy-note"><span>◈</span><div><strong id="privacy-title">Only here while you are.</strong><p id="privacy-description">Only connected players appear. Room chat is transient. Log out to leave.</p><button id="bubbles" class="text-button" aria-pressed="true">Speech bubbles on</button></div></div></aside></div>
+  <dialog id="help-dialog"><button id="close-help" class="icon-button" aria-label="Close help">×</button><h2>Make yourself at home.</h2><p>With Discord connected, messages move members to the matching room for two minutes. Voice sessions keep members in their voice room. Ten quiet minutes sends them to Nap Room. Offline members may be dimmed or hidden, based on server settings.</p><p>Discord-tracked characters move automatically; manual controls apply to demo players or when the bot is disabled. Drag to pan, scroll or use +/− to zoom. Fit to view resets the camera. Click a name to follow them, or use Find me.</p><p>Message previews are transient and are never stored. The local speech-bubble switch hides previews for you. Logging out ends your viewer session; it does not remove your server member character.</p><p>${mock ? 'This is a demo with fictional players. No real Discord messages are read.' : 'You signed in with Discord. Server membership is checked during login.'}</p></dialog>`;
   const scene = new OfficeScene();
   new Phaser.Game({ type: Phaser.AUTO, parent: 'map', backgroundColor: '#09070f', scene, scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' }, render: { antialias: true }, audio: { noAudio: true } });
   let snapshot: Snapshot | undefined, selected: Room | undefined, query = '', selfId = user.id;
   let localBubbles = localStorage.getItem('office-bubbles') !== 'off';
   let socket: WebSocket, retry = 0, stopped = false, rosterKey = '', chatVisible = false;
   const keys = new Set<string>(); let lastDirection = '';
+  const discordControlled = () => snapshot?.members.find(m => m.id === selfId)?.source === 'discord';
   const send = (packet: ClientPacket) => { if (socket?.readyState === WebSocket.OPEN && !stopped) socket.send(JSON.stringify(packet)); };
   function renderRoster(force = false) {
     if (!snapshot) return;
-    const key = JSON.stringify(snapshot.members.map(m => [m.id, m.username, m.avatar, m.room, m.sleeping]));
+    const key = JSON.stringify(snapshot.members.map(m => [m.id, m.username, m.avatar, m.room, m.sleeping, m.presence]));
     if (!force && rosterKey === key) return; rosterKey = key;
     const roster = el('roster'), scroll = roster.scrollTop; roster.replaceChildren();
     el('total').textContent = String(snapshot.members.length);
-    el('roster-subtitle').textContent = `${snapshot.members.length} players across 9 rooms`;
+    el('roster-subtitle').textContent = `${snapshot.members.length} members across 9 rooms`;
     let results = 0;
     for (const room of rooms) {
       const all = snapshot.members.filter(m => m.room === room.name), members = all.filter(m => m.username.toLocaleLowerCase().includes(query));
@@ -66,7 +67,7 @@ function office(user: Identity, mock: boolean) {
         const avatar = document.createElement('span'); avatar.className = 'roster-avatar'; avatar.textContent = Array.from(member.username)[0] ?? '?';
         if (member.avatar) { const img = document.createElement('img'); img.src = member.avatar; img.alt = ''; img.loading = 'lazy'; img.onerror = () => img.remove(); avatar.append(img); }
         const label = document.createElement('span'); label.className = 'member-name'; label.textContent = member.username + (member.id === selfId ? ' (you)' : '');
-        const state = document.createElement('span'); state.className = 'member-state'; state.textContent = member.sleeping ? 'Zzz' : ''; row.append(avatar, label, state); section.append(row);
+        const state = document.createElement('span'); state.className = 'member-state'; state.textContent = member.presence === 'offline' ? 'Offline' : member.sleeping ? 'Zzz' : ''; row.classList.toggle('offline', member.presence === 'offline'); row.append(avatar, label, state); section.append(row);
       }
       roster.append(section);
     }
@@ -75,7 +76,7 @@ function office(user: Identity, mock: boolean) {
   }
   function bubbleControl() { const enabled = localBubbles && snapshot?.config.bubbleEnabled !== false; el('bubbles').textContent = `Speech bubbles ${enabled ? 'on' : 'off'}`; el('bubbles').setAttribute('aria-pressed', String(enabled)); }
   function closeChat() { chatVisible = false; el('chat-form').hidden = true; el<HTMLInputElement>('chat-input').blur(); }
-  function openChat() { if (stopped) return; chatVisible = true; keys.clear(); send({ type: 'input', dx: 0, dy: 0 }); send({ type: 'wake' }); el('chat-form').hidden = false; el<HTMLInputElement>('chat-input').focus(); }
+  function openChat() { if (stopped || discordControlled()) return; chatVisible = true; keys.clear(); send({ type: 'input', dx: 0, dy: 0 }); send({ type: 'wake' }); el('chat-form').hidden = false; el<HTMLInputElement>('chat-input').focus(); }
   el('chat-open').onclick = openChat; el('chat-close').onclick = closeChat;
   el('chat-form').onsubmit = event => { event.preventDefault(); const input = el<HTMLInputElement>('chat-input'), text = Array.from(input.value.trim()).slice(0, 80).join(''); if (text) send({ type: 'chat', text }); input.value = ''; el('chat-count').textContent = '0/80'; closeChat(); };
   el<HTMLInputElement>('chat-input').oninput = () => { const input = el<HTMLInputElement>('chat-input'); input.value = Array.from(input.value).slice(0, 80).join(''); el('chat-count').textContent = `${Array.from(input.value).length}/80`; send({ type: 'wake' }); };
@@ -91,7 +92,7 @@ function office(user: Identity, mock: boolean) {
     catch { button.disabled = false; el('map-notice').hidden = false; el('map-notice').textContent = 'Could not end your session. Check the connection and try Log out again.'; }
   };
   document.querySelectorAll<HTMLButtonElement>('.emote').forEach(button => { button.onclick = () => send({ type: 'emote', index: Number(button.dataset.index) }); });
-  window.addEventListener('office-move', event => { if (!chatVisible) { const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail; keys.clear(); lastDirection = '0:0'; send({ type: 'move_to', x, y }); } });
+  window.addEventListener('office-move', event => { if (!chatVisible && !discordControlled()) { const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail; keys.clear(); lastDirection = '0:0'; send({ type: 'move_to', x, y }); } });
   window.addEventListener('office-zoom', event => { el('zoom-value').textContent = `${(event as CustomEvent<number>).detail}%`; });
   const movementKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
   let lastActivitySignal = 0;
@@ -102,6 +103,7 @@ function office(user: Identity, mock: boolean) {
     const key = event.key.toLowerCase();
     if (key === 'escape') { closeChat(); document.querySelector('.map-shell')!.classList.remove('expanded'); el('expand').textContent = 'Expand'; return; }
     if (typing || el<HTMLDialogElement>('help-dialog').open) return;
+    if (discordControlled()) { if (movementKeys.includes(key)) event.preventDefault(); return; }
     if (key === 'enter') { event.preventDefault(); openChat(); return; }
     if (movementKeys.includes(key)) { event.preventDefault(); keys.add(key); }
     else if (/^[1-5]$/.test(key) && !event.repeat) send({ type: 'emote', index: Number(key) - 1 });
@@ -132,6 +134,17 @@ function office(user: Identity, mock: boolean) {
       if (packet.type === 'error') return;
       snapshot = packet.state; if (packet.type === 'snapshot') { selfId = packet.selfId; scene.setSelf(selfId); }
       scene.sync(snapshot); renderRoster(); bubbleControl();
+      const automatic = discordControlled(), linked = snapshot.discord?.state === 'connected';
+      el('mode').textContent = mock ? 'Demo office' : linked ? 'Discord live' : 'Live office';
+      el('office-description').textContent = linked ? 'Your Discord server, live. Chat in a channel to visit its room.' : 'Your character. Your pace. Make yourself at home.';
+      el('discord-status').hidden = !snapshot.discord || snapshot.discord.state === 'disabled';
+      el('discord-status').textContent = snapshot.discord?.detail ?? '';
+      el('discord-status').classList.toggle('linked', linked);
+      el('movement-hint').textContent = automatic ? 'Chat in Discord to move · Drag to pan · Scroll to zoom' : 'WASD / arrows to walk · Click to move · Drag to pan';
+      el<HTMLButtonElement>('chat-open').disabled = automatic;
+      document.querySelectorAll<HTMLButtonElement>('.emote').forEach(button => { button.disabled = automatic; });
+      if (automatic) { keys.clear(); if (chatVisible) closeChat(); }
+      if (linked) { el('privacy-title').textContent = 'Live Discord activity'; el('privacy-description').textContent = 'Members appear from Discord. Previews are transient. Log out ends your viewer session.'; }
       el('server-name').textContent = snapshot.config.serverName;
       el('room-hint').textContent = snapshot.members.find(m => m.id === selfId)?.room ?? 'Office';
       el('update-time').textContent = mock ? 'Demo · move around and try the controls' : 'Live · 20 updates / second';

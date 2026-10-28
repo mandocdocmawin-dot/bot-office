@@ -1,6 +1,6 @@
 # Discord Office
 
-A manual multiplayer office for your Discord server, built by extending the original Phaser + WebSocket project. Walk through the nine-room isometric office, chat with people nearby, and hang out. Discord is used only for OAuth2 login and server-membership verification. No bot, gateway connection, database, or channel mappings.
+A live isometric office for your Discord server, built on the existing Phaser + WebSocket project. The bot moves member characters automatically when they chat or join voice. OAuth2 restricts map viewers to server members. The existing manual multiplayer mode remains available when Discord tracking is disabled, and mock mode needs no credentials.
 
 ## Try it without Discord
 
@@ -11,7 +11,7 @@ npm install
 npm run mock
 ```
 
-Open **http://localhost:5173**. Mock mode automatically creates a demo player for you and adds 18 fictional players walking through the same doors and collision geometry as human players. No credentials are required. Demo sessions and fake players exist only in memory. Stop with Ctrl+C before switching to real login mode.
+Open **http://localhost:5174**. Mock mode automatically creates a demo player for you and adds 18 fictional players walking through the same doors and collision geometry as human players. No credentials are required. Demo sessions and fake players exist only in memory. Stop with Ctrl+C before switching to real login mode.
 
 ## Controls
 
@@ -26,15 +26,15 @@ Open **http://localhost:5173**. Mock mode automatically creates a demo player fo
 
 Chat and emotes appear only to connected players in the sender's room and disappear after five seconds. They are never stored or logged. New snapshots and reconnects do not replay chat. The sidebar bubble control hides previews on your device.
 
-New players spawn in **Front Office**. After ten minutes without player input, the server teleports your character to **Nap Room** and displays Zzz. Any input wakes you; you remain there until you walk out. Discord chat, voice and presence do not move anyone.
+In manual/mock mode, new players spawn in **Front Office** and ten minutes without input sends them to **Nap Room**. With the bot connected, Discord messages, voice and presence drive the character instead. Browser clicks and keys cannot override a tracked character or reset its Discord idle timer.
 
 ## Set up Discord OAuth2
 
-1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications). You do not need to create or invite a bot, enable gateway intents, or request message access.
+1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications). OAuth2 signs viewers in; the separate Bot setup below enables automatic channel activity.
 2. Open **OAuth2 → Redirects** and add exactly:
 
    ```text
-   http://localhost:5173/auth/callback
+   http://localhost:5174/auth/callback
    ```
 
 3. Copy the application's **Client ID** and **Client Secret** from its OAuth2 settings. Keep the secret on the server.
@@ -44,11 +44,11 @@ New players spawn in **Front Office**. After ten minutes without player input, t
    ```env
    DISCORD_CLIENT_ID=your_application_id
    DISCORD_CLIENT_SECRET=your_application_secret
-   DISCORD_REDIRECT_URI=http://localhost:5173/auth/callback
+   DISCORD_REDIRECT_URI=http://localhost:5174/auth/callback
    GUILD_ID=your_server_id
    SESSION_SECRET=your_random_secret_at_least_32_characters
    PORT=3001
-   WEB_URL=http://localhost:5173
+   WEB_URL=http://localhost:5174
    HOST=127.0.0.1
    ```
 
@@ -58,15 +58,40 @@ New players spawn in **Front Office**. After ten minutes without player input, t
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
 
-6. Run `npm run dev` and open **http://localhost:5173**. Choose **Continue with Discord** and approve only **identify** and **guilds**. Discord redirects to the server callback through Vite's `/auth` proxy.
+6. Run `npm run dev` and open **http://localhost:5174**. Choose **Continue with Discord** and approve only **identify** and **guilds**. Discord redirects to the server callback through Vite's `/auth` proxy.
 
 The server exchanges the code, checks `/users/@me/guilds` for `GUILD_ID`, and creates an in-memory session. Non-members see **You must be a member of the server**. The session is a signed opaque cookie with HttpOnly and SameSite=Lax; HTTPS deployments also set Secure. OAuth state is browser-bound, single-use and expires after five minutes, with PKCE on the code exchange. Access and refresh tokens are discarded after login. Client secrets and OAuth tokens never reach browser JavaScript.
 
-Sessions expire after eight hours or when the server restarts. Membership is checked at login, not continuously. Logging in again invalidates previous sessions for that Discord account. Opening a second tab with the same session replaces the first tab's WebSocket; the old tab stops rather than fighting to reconnect. Normal network reconnects preserve the last position for up to 60 seconds, while the disconnected player disappears immediately from the public roster.
+Sessions expire after eight hours or when the server restarts. Membership is checked at login, not continuously. Logging in again invalidates previous sessions for that Discord account. Opening a second tab with the same session replaces the first tab's WebSocket; the old tab stops rather than fighting to reconnect. Normal network reconnects preserve the last position for up to 60 seconds, while a disconnected manual player disappears from the roster. Discord-tracked characters remain independently of viewers.
 
-`.env` and `.env.local` are ignored by Git. No opt-out file is used; players appear only while connected.
+`.env` and `.env.local` are ignored by Git. No opt-out file is used in this revision. Discord-tracked server members appear independently of whether they have the map open; offline members are dimmed by default. Logging out only ends the viewer session.
 
 Official API details: [Discord OAuth2](https://github.com/discord/discord-api-docs/blob/main/developers/topics/oauth2.mdx), [user/profile and guild APIs](https://github.com/discord/discord-api-docs/blob/main/developers/resources/user.mdx).
+
+
+## Automatic Discord activity (bot setup)
+
+The bot token is different from the OAuth Client Secret. In Developer Portal → your application → **Bot**, enable **Server Members Intent**, **Presence Intent**, and **Message Content Intent**. Put the Bot token in private root `.env`:
+
+```env
+DISCORD_TOKEN=your_bot_token
+```
+
+Invite that application to the server selected by GUILD_ID using OAuth2 URL Generator, scope **bot**, with **View Channels** and **Read Message History**. Administrator and voice-connect permissions are unnecessary. The bot never sends messages into Discord. Give it View Channel access in every room/channel you want to observe, including the forum. After changing .env or intents, stop the current dev process before restarting npm run dev; do not start another copy on the same ports.
+
+The status banner in the office reports missing token, connecting, connected, or setup failure. /health also includes this status without credentials. OAuth login remains required for viewers even though all human guild members can appear as characters. Bots/webhooks are excluded.
+
+The default `config.json` → `discord.channels` aliases work with decorated channel names such as 💬┃GENERAL. Discord names are normalized to match general, study, tech, github-profiles-collection, gaming, clips, art, rules, announcement(s), welcome, milestone, roles and share-projects. For reliable routing after renames, set an explicit channel `id`; duplicate an entry if multiple IDs belong to the same room. Explicit IDs take precedence. Threads use their parent forum/channel even if their title happens to be another mapped room name. Unmapped channels fall back to Commons.
+
+Main General voice maps to Commons. Any other voice channel under CALL FOR VOICE maps to Meeting Room. Set main_general_voice_channel_id explicitly if multiple voice channels are named General. New members spend ten seconds in Front Office. Text/forum activity sends members through the existing doors to the mapped room, holds it for two minutes, then returns to Commons. Voice takes priority over messages and prevents naps until the member disconnects. Ten minutes without Discord activity sends them to Nap Room; Discord activity wakes them. Presence changes wake sleeping characters; repeated identical presence updates do not reset the clock.
+
+Discord message previews are capped at 40 Unicode characters and sent transiently to current room occupants. They are never written to files, retained in member state, logged or replayed to reconnects. Set `discord.message_previews=false` to prevent content collection/transmission and omit Message Content intent. Set `discord.offline_behavior=hide` to hide offline/invisible members, or `grey` to dim them. The default is grey, so users with Invisible status can still locate their character. Local bubble controls only hide previews for that viewer.
+
+Set `discord.enabled=false` and restart to return to purely manual multiplayer. `npm run mock` always stays offline and never logs the bot in.
+
+## Camera zoom
+
+Mouse wheel/trackpad zoom is captured only over the canvas and stays anchored under the cursor. +/− buttons zoom around the camera center; range is 50–600%. Expand/window resize preserves the selected zoom. Only **Fit to view** resets it to 100%. Drag pans the zoomed view.
 
 ## Share with friends using a tunnel
 
@@ -148,6 +173,9 @@ server/                 Renamed from the original bot/ server folder
     index.ts            Environment and server startup
     app.ts              Existing HTTP/ws layer, now authenticated multiplayer
     auth.ts             OAuth2, signed in-memory sessions, logout
+    discord.ts          Gateway connector and live member/voice/message events
+    discord-routing.ts  Decorated channel aliases, IDs and forum/voice routing
+    discord.test.ts     Automatic routing, timers, previews and voice tests
     protocol.ts         Shared identity, position and input types
     config.ts           Public map/simulation validation
     world.ts            Walls, doors, collision, safe spawns and pathfinding

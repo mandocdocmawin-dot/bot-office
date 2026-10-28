@@ -44,6 +44,7 @@ export class Auth {
     for (const [id, s] of this.sessions) if (s.expires <= this.now()) this.sessions.delete(id);
     for (const [id, f] of this.flows) if (f.expires <= this.now()) this.flows.delete(id);
   }
+  revokeUser(userId: string) { for (const [id, session] of this.sessions) if (session.user.id === userId) this.sessions.delete(id); this.onInvalidate(userId); }
   private redirect(res: ServerResponse, url: string) { res.writeHead(302, { Location: url, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(); }
   private json(res: ServerResponse, data: unknown, status = 200) { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
