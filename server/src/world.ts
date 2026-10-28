@@ -41,24 +41,28 @@ export class World {
     if (this.clearLine(start, end)) return [end];
     // Bounded A* over the same collision geometry used by manual movement.
     const grid = 16, key = (x: number, y: number) => `${x},${y}`;
-    const sx = Math.round(start.x / grid), sy = Math.round(start.y / grid), ex = Math.round(end.x / grid), ey = Math.round(end.y / grid);
+    // Anchor the search lattice to the actual player. Rounding the start onto
+    // a global grid can put it inside furniture, trapping clicks from narrow aisles.
+    const sx = 0, sy = 0, ex = (end.x - start.x) / grid, ey = (end.y - start.y) / grid;
+    const point = (x: number, y: number) => ({ x: start.x + x * grid, y: start.y + y * grid });
     const nodes = new Map<string, { x: number; y: number; g: number; f: number; parent?: string }>();
     const first = key(sx, sy), open = new Set([first]), closed = new Set<string>();
     nodes.set(first, { x: sx, y: sy, g: 0, f: Math.hypot(ex - sx, ey - sy) });
     while (open.size && closed.size < 8000) {
       let best = ''; let score = Infinity;
       for (const id of open) if (nodes.get(id)!.f < score) { best = id; score = nodes.get(id)!.f; }
-      const n = nodes.get(best)!; const p = { x: n.x * grid, y: n.y * grid };
+      const n = nodes.get(best)!; const p = point(n.x, n.y);
       open.delete(best); closed.add(best);
       if (Math.hypot(p.x - end.x, p.y - end.y) <= grid * 2 && this.clearLine(p, end)) {
         const result: Point[] = [end]; let cursor: string | undefined = best;
-        while (cursor && cursor !== first) { const v: { x: number; y: number; parent?: string } = nodes.get(cursor)!; result.unshift({ x: v.x * grid, y: v.y * grid }); cursor = v.parent; }
+        while (cursor && cursor !== first) { const v: { x: number; y: number; parent?: string } = nodes.get(cursor)!; result.unshift(point(v.x, v.y)); cursor = v.parent; }
         if (result[0] && !this.clearLine(start, result[0])) return [];
         return result;
       }
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
         const x = n.x + dx, y = n.y + dy, id = key(x, y);
-        if (closed.has(id) || !this.walkable(x * grid, y * grid) || !this.clearLine(best === first ? start : p, { x: x * grid, y: y * grid })) continue;
+        const next = point(x, y);
+        if (closed.has(id) || !this.walkable(next.x, next.y) || !this.clearLine(p, next)) continue;
         const cost = n.g + Math.hypot(dx, dy);
         if (!nodes.has(id) || cost < nodes.get(id)!.g) { nodes.set(id, { x, y, g: cost, f: cost + Math.hypot(ex - x, ey - y), parent: best }); open.add(id); }
       }

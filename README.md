@@ -1,6 +1,6 @@
 # Discord Office
 
-A live isometric office for your Discord server, built on the existing Phaser + WebSocket project. The bot moves member characters automatically when they chat or join voice. OAuth2 restricts map viewers to server members. The existing manual multiplayer mode remains available when Discord tracking is disabled, and mock mode needs no credentials.
+A live isometric office for your Discord server, built on the existing Phaser + WebSocket project. The bot moves member characters automatically when they chat or join voice. OAuth2 restricts map viewers to server members. Hybrid controls let signed-in members walk manually while Discord activity still assigns new room destinations. Mock mode needs no credentials.
 
 ## Try it without Discord
 
@@ -26,7 +26,7 @@ Open **http://localhost:5174**. Mock mode automatically creates a demo player fo
 
 Chat and emotes appear only to connected players in the sender's room and disappear after five seconds. They are never stored or logged. New snapshots and reconnects do not replay chat. The sidebar bubble control hides previews on your device.
 
-In manual/mock mode, new players spawn in **Front Office** and ten minutes without input sends them to **Nap Room**. With the bot connected, Discord messages, voice and presence drive the character instead. Browser clicks and keys cannot override a tracked character or reset its Discord idle timer.
+New players spawn in **Front Office**. Hybrid mode is enabled by default: use WASD/arrows or click-to-move even while Discord is connected. New Discord chat or voice events assign a new room destination; your next manual movement takes over and cancels a pending two-minute Commons return. Browser activity renews the idle timer and wakes naps. An active Discord voice call still prevents naps even if you walk to another map room. A delayed key-up does not cancel a fresh Discord route. Set discord.hybrid_controls=false to restore automatic-only controls.
 
 ## Set up Discord OAuth2
 
@@ -77,7 +77,7 @@ The bot token is different from the OAuth Client Secret. In Developer Portal →
 DISCORD_TOKEN=your_bot_token
 ```
 
-Invite that application to the server selected by GUILD_ID using OAuth2 URL Generator, scope **bot**, with **View Channels** and **Read Message History**. Administrator and voice-connect permissions are unnecessary. The bot never sends messages into Discord. Give it View Channel access in every room/channel you want to observe, including the forum. After changing .env or intents, stop the current dev process before restarting npm run dev; do not start another copy on the same ports.
+Invite that application to the server selected by GUILD_ID using OAuth2 URL Generator, scope **bot**, with **View Channels** and **Read Message History**. Administrator is unnecessary. The speaking indicator additionally requires **Connect** permission for the monitored voice channel. The bot never sends messages into Discord. Give it View Channel access in every room/channel you want to observe, including the forum. After changing .env or intents, stop the current dev process before restarting npm run dev; do not start another copy on the same ports.
 
 The status banner in the office reports missing token, connecting, connected, or setup failure. /health also includes this status without credentials. OAuth login remains required for viewers even though all human guild members can appear as characters. Bots/webhooks are excluded.
 
@@ -88,6 +88,21 @@ Main General voice maps to Commons. Any other voice channel under CALL FOR VOICE
 Discord message previews are capped at 40 Unicode characters and sent transiently to current room occupants. They are never written to files, retained in member state, logged or replayed to reconnects. Set `discord.message_previews=false` to prevent content collection/transmission and omit Message Content intent. Set `discord.offline_behavior=hide` to hide offline/invisible members, or `grey` to dim them. The default is grey, so users with Invisible status can still locate their character. Local bubble controls only hide previews for that viewer.
 
 Set `discord.enabled=false` and restart to return to purely manual multiplayer. `npm run mock` always stays offline and never logs the bot in.
+
+
+## Visual speaking indicator and walking animation
+
+Set `discord.speaking_indicator=true` (default) for a green ring, animated speaking bars, and sidebar Speaking state. Merely joining voice shows **In voice** or **Muted**; it does not fake speaking. General voice maps to Commons, including decorated small-cap names such as ɢᴇɴᴇʀᴀʟ. Voice membership remains independent of where you walk manually in the map.
+
+The bot joins one occupied voice channel at a time, self-muted and with self-deafening off so it can detect packet activity. It stays in an occupied channel, otherwise prefers main General voice and then the busiest occupied call. An explicit `discord.speaking_channel_id` selects a single channel instead. Discord permits one simultaneous voice channel per bot account per guild; other calls still have normal room movement and voice labels, but no real speaking signal while unmonitored. The status banner names the monitored call. The bot leaves when no human participants remain. Set speaking_indicator=false and restart to disable voice monitoring.
+
+The receiver uses its SpeakingMap only; the app creates **no audio stream subscriptions**, decoders, audio players, recordings, transcriptions, or browser audio tracks. Incoming encrypted packets are used for speaking activity and their audio payload is not decoded, persisted, or relayed. The voice receiver API is a library beta, so the banner reports connection failures rather than simulating a live speaker. /health exposes a coarse speaking-event count for connectivity diagnostics, without participant identities or audio.
+
+To test live speech, actually join the Discord voice call, unmute, and speak while the bot is present. Muting, leaving, loss of monitoring, or missing events clears the indicator. No browser microphone permission is needed. In mock mode Alex and Jun simulate speaking without any microphone or Discord connection.
+
+Characters have separately animated feet and arms while walking. The stride resets when stopped; reduced-motion preference keeps limbs static. Your own character is fully opaque in your local view even with Discord Invisible/offline presence; other offline members keep the configured dimming.
+
+Voice implementation references: [VoiceConnection receiver](https://discord.js.org/docs/packages/voice/main/VoiceConnection%3AClass), [VoiceReceiver packet handling](https://github.com/discordjs/discord.js/blob/main/packages/voice/src/receive/VoiceReceiver.ts).
 
 ## Camera zoom
 
@@ -176,6 +191,9 @@ server/                 Renamed from the original bot/ server folder
     discord.ts          Gateway connector and live member/voice/message events
     discord-routing.ts  Decorated channel aliases, IDs and forum/voice routing
     discord.test.ts     Automatic routing, timers, previews and voice tests
+    voice.ts            Single-call speaking monitor; no audio subscriptions
+    voice-policy.ts     Stable occupied-channel selection
+    hybrid.test.ts      Hybrid takeover, mute/speaking and monitor-policy tests
     protocol.ts         Shared identity, position and input types
     config.ts           Public map/simulation validation
     world.ts            Walls, doors, collision, safe spawns and pathfinding

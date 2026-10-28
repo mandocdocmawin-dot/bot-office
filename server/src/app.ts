@@ -37,7 +37,7 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
       res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'no-referrer');
-      if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ready: true, mode: office.mode, discord: office.discord })); return; }
+      if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ready: true, mode: office.mode, discord: office.discord, voiceMonitor: office.voiceMonitor })); return; }
       if (await auth.handle(req, res, url)) return;
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
       const file = resolve(webRoot, `.${decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)}`);

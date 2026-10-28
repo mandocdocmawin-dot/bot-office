@@ -52,3 +52,8 @@ Added `server/src/discord.ts`, `server/src/discord-routing.ts`, and `server/src/
 Updated `server/src/office.ts`, `protocol.ts`, `config.ts`, `auth.ts`, `app.ts`, `index.ts`, `config.json`, the server package/lockfile, `.env.example`, and README. Restored `discord.js` as a server dependency and added private `DISCORD_TOKEN` configuration. Token validity and guild membership are checked separately; missing invitation or intents are shown in the office status banner.
 
 Updated `web/src/main.ts` and `style.css` for live Discord status, automatic-control hints, offline dimming, and accurate privacy wording. Updated `web/src/scene.ts` to preserve zoom on resize/Expand, capture wheel/trackpad scrolling over the canvas without scrolling the page, zoom toward the pointer, and support 50–600% magnification. Fit to view is the explicit reset. Browser checks verified +/−, wheel input and zoom preservation across Expand. Server checks cover six additional Discord activity scenarios (19 total tests).
+
+
+## Hybrid controls, speaking indicators and articulated walking
+
+Added server/src/voice.ts, voice-policy.ts, hybrid.test.ts and @discordjs/voice. Updated the office model/protocol/config, Discord adapter and existing tests for manual takeover, voice labels, mute/speaking state, safe expiry and one-call monitoring. The live bot joins the selected call without audio stream subscriptions or browser audio. Updated the frontend for hybrid controls, speaking rings/bars, full-opacity self characters, and separately animated legs/arms. Small-cap channel names normalize correctly. Switched the server dev/mock scripts to the verified Node watcher after tsx watch stalled with the new dependency. Existing OAuth, collision, zoom and room geometry remain.

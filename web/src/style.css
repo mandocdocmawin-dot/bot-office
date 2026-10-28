@@ -9,3 +9,5 @@
 @media(max-width:720px){#map{height:330px;min-height:260px;max-height:440px}.map-shell.expanded #map{height:calc(100dvh - 148px);max-height:none;min-height:0}}
 
 #discord-status{margin:-9px 0 14px;padding:9px 12px;background:#332b20;color:#e1c59a;border-radius:5px;font-size:12px}#discord-status.linked{background:#1c3029;color:#9cd0b9}button:disabled{opacity:.4;cursor:default}
+
+#voice-status{margin:-5px 0 14px;padding:8px 12px;background:#302a22;color:#dfc59f;border-radius:5px;font-size:11px}#voice-status.linked{background:#152a23;color:#9cd9b9}.member-state.speaking{color:#8be4b0;font-weight:600}.speaking-avatar{outline:2px solid #77dfaa;outline-offset:2px}

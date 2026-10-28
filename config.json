@@ -361,6 +361,9 @@
         ],
         "room": "Showcase"
       }
-    ]
+    ],
+    "hybrid_controls": true,
+    "speaking_indicator": true,
+    "speaking_channel_id": ""
   }
 }

@@ -1,7 +1,8 @@
 import { ChannelType, Client, Events, GatewayIntentBits, Routes, type GuildMember } from 'discord.js';
 import type { Office } from './office.js';
-import { textRoom, voiceRoom } from './discord-routing.js';
+import { channelKey, textRoom, voiceRoom } from './discord-routing.js';
 import type { Member } from './protocol.js';
+import { SpeakingIndicator } from './voice.js';
 const presence = (status?: string): NonNullable<Member['presence']> => status === 'online' || status === 'idle' || status === 'dnd' ? status : 'offline';
 export function startDiscord(office: Office, token: string | undefined, guildId: string, onMemberLeave: (id: string) => void = () => {}) {
   const settings = office.config.discord;
@@ -11,6 +12,7 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
   const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates];
   if (settings.message_previews) intents.push(GatewayIntentBits.MessageContent);
   const client = new Client({ intents });
+  const speaking = new SpeakingIndicator(office);
   const upsert = (m: GuildMember, welcome = false) => {
     if (m.user.bot) return;
     office.upsertDiscord({ id: m.id, username: m.displayName, avatar: m.displayAvatarURL({ extension: 'png', size: 64 }) }, presence(m.presence?.status), welcome);
@@ -23,7 +25,7 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
       await guild.channels.fetch();
       // Resolve the actual main voice channel in memory, never overwrite config.
       if (!settings.main_general_voice_channel_id) {
-        const general = guild.channels.cache.find(c => c.type === ChannelType.GuildVoice && voiceRoom(office.config, c, c.parent?.name) === 'Commons' && /general/i.test(c.name));
+        const general = guild.channels.cache.find(c => c.type === ChannelType.GuildVoice && channelKey(c.name) === 'general');
         if (general) settings.main_general_voice_channel_id = general.id;
       }
       const members = await guild.members.fetch({ withPresences: true });
@@ -31,10 +33,11 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
       for (const p of office.members.values()) if (p.source === 'discord' && !members.has(p.id)) { office.forgetDiscordMember(p.id); onMemberLeave(p.id); }
       for (const member of members.values()) {
         upsert(member);
-        if (!member.user.bot && member.voice.channel) office.discordVoice(member.id, voiceRoom(office.config, member.voice.channel, member.voice.channel.parent?.name));
+        if (!member.user.bot && member.voice.channel) office.discordVoice(member.id, voiceRoom(office.config, member.voice.channel, member.voice.channel.parent?.name), { channelId: member.voice.channel.id, channelName: member.voice.channel.name, muted: !!(member.voice.selfMute || member.voice.serverMute || member.voice.suppress) });
       }
       office.discord = { state: 'connected', detail: 'Discord connected. Chat in a channel to move your character automatically.' };
       console.log(`Discord activity connected (${office.members.size} characters).`);
+      speaking.sync(guild);
     } catch { fail('Could not load the server. Invite the bot to GUILD_ID and enable Server Members and Presence intents.'); client.destroy(); }
   });
   client.on(Events.MessageCreate, message => {
@@ -53,9 +56,14 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
     } catch { /* A deleted or inaccessible thread is not replayed as activity. */ }
   });
   client.on(Events.VoiceStateUpdate, (before, after) => {
-    if (after.guild.id !== guildId || before.channelId === after.channelId || after.member?.user.bot) return;
-    if (after.member) upsert(after.member);
-    office.discordVoice(after.id, after.channel ? voiceRoom(office.config, after.channel, after.channel.parent?.name) : null);
+    if (after.guild.id !== guildId) return;
+    if (!after.member?.user.bot) {
+      if (after.member && !office.members.has(after.id)) upsert(after.member);
+      const voice = after.channel ? { channelId: after.channel.id, channelName: after.channel.name, muted: !!(after.selfMute || after.serverMute || after.suppress) } : null;
+      if (before.channelId !== after.channelId) office.discordVoice(after.id, after.channel ? voiceRoom(office.config, after.channel, after.channel.parent?.name) : null, voice ?? undefined);
+      else office.discordVoiceState(after.id, voice);
+    }
+    speaking.sync(after.guild);
   });
   client.on(Events.PresenceUpdate, (_, value) => {
     if (value.guild?.id !== guildId || value.member?.user.bot) return;
@@ -67,10 +75,11 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
   client.on(Events.GuildMemberUpdate, (_, member) => { if (member.guild.id === guildId) upsert(member); });
   client.on(Events.Error, () => fail('Discord connection error. Check the bot token, internet connection and enabled intents.'));
   client.on(Events.ShardDisconnect, (event) => {
+    speaking.suspend();
     if (event.code === 4014) fail('Enable Server Members, Presence and Message Content intents in Developer Portal → Bot.');
     else if (!stopped) office.discord = { state: 'connecting', detail: 'Discord disconnected. Reconnecting…' };
   });
-  client.on(Events.ShardResume, () => { office.discord = { state: 'connected', detail: 'Discord reconnected. Channel activity moves your character.' }; });
+  client.on(Events.ShardResume, () => { office.discord = { state: 'connected', detail: 'Discord reconnected. Channel activity moves your character.' }; const guild = client.guilds.cache.get(guildId); if (guild) speaking.sync(guild); });
   const login = () => client.login(token.trim()).catch((error: unknown) => {
     const description = error instanceof Error ? error.message : '';
     if (/disallowed intents/i.test(description)) fail('Enable Server Members, Presence and Message Content intents in Developer Portal → Bot, then restart npm run dev.');
@@ -88,5 +97,5 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
     else fail('Could not verify the bot server access. Check Discord connectivity and GUILD_ID.');
     client.destroy();
   });
-  return () => { stopped = true; client.destroy(); };
+  return () => { stopped = true; speaking.stop(); client.destroy(); };
 }

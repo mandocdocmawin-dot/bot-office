@@ -13,6 +13,9 @@ function fixture() {
 }
 test('decorated server channel names, explicit IDs, forum parents and fallback resolve', () => {
   const c = loadConfig(); assert.equal(channelKey('💬┃GENERAL'), 'general');
+  assert.equal(channelKey('💬│ɢᴇɴᴇʀᴀʟ'), 'general');
+  assert.equal(textRoom(c, { id: 'smallcaps-study', name: '📚│ꜱᴛᴜᴅʏ' }), 'Study Hall');
+  assert.equal(voiceRoom(c, { id: 'voice', name: '💬│ɢᴇɴᴇʀᴀʟ' }, 'CALL FOR VOICE'), 'Commons');
   assert.equal(textRoom(c, { id: 'text', name: '💬┃GENERAL' }), 'Commons');
   assert.equal(textRoom(c, { id: 'study', name: '📚┃STUDY' }), 'Study Hall');
   assert.equal(textRoom(c, { id: 'thread', name: 'New project' }, { id: 'forum', name: '🖼┃SHARE-PROJECTS' }), 'Showcase');
@@ -37,7 +40,7 @@ test('voice overrides messages and prevents naps; voice leave returns to Commons
   office.discordVoice('discord-1', null); arrive(); assert.equal(office.members.get('discord-1')!.room, 'Commons');
 });
 test('tracked members survive viewer disconnect and ignore browser movement/wake', () => {
-  const { office, advance } = fixture(); const p = office.members.get('discord-1')!;
+  const { office, advance, config } = fixture(); config.discord!.hybrid_controls = false; const p = office.members.get('discord-1')!;
   office.leave(p.id); assert.ok(office.members.has(p.id));
   advance(office.config.idle_timeout_ms); assert.equal(p.sleeping, true);
   office.input(p.id, { type: 'wake' }); assert.equal(p.sleeping, true);

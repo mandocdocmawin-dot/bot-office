@@ -1,6 +1,7 @@
 import type { Config } from './config.js';
 import type { Room } from './protocol.js';
-export const channelKey = (name: string) => name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const smallCaps = Object.fromEntries(Array.from('ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘꞯʀꜱᴛᴜᴠᴡxʏᴢ', (letter, index) => [letter, 'abcdefghijklmnopqrstuvwxyz'[index]]));
+export const channelKey = (name: string) => Array.from(name.normalize('NFKD').toLowerCase(), letter => smallCaps[letter] ?? letter).join('').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 export function textRoom(config: Config, channel: { id: string; name: string }, parent?: { id: string; name: string } | null): Room {
   const d = config.discord;
   // A thread's free-form title must never override its mapped parent forum.

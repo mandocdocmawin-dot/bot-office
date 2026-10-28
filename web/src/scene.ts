@@ -7,6 +7,8 @@ interface Character {
   name: Phaser.GameObjects.Text; status: Phaser.GameObjects.Arc;
   bubble?: Phaser.GameObjects.Container; zzz: Phaser.GameObjects.Text;
   member: Member; seed: number; targetX: number; targetY: number;
+  voiceRing: Phaser.GameObjects.Arc; talk: Phaser.GameObjects.Container; talkBars: Phaser.GameObjects.Rectangle[]; voiceName: Phaser.GameObjects.Text;
+  legs: [Phaser.GameObjects.Container, Phaser.GameObjects.Container]; arms: [Phaser.GameObjects.Container, Phaser.GameObjects.Container];
 }
 export class OfficeScene extends Phaser.Scene {
   private people = new Map<string, Character>();
@@ -143,8 +145,18 @@ export class OfficeScene extends Phaser.Scene {
       c.root.x += (c.targetX - c.root.x) * blend; c.root.y += (c.targetY - c.root.y) * blend;
       c.root.setDepth((c.bubble ? 4000 : 1000) + c.root.y);
       const walking = !this.frozen && !this.reducedMotion.matches && c.member.moving;
+      const stride = walking ? Math.sin(time / 85 + c.seed) : 0;
+      c.legs[0].setPosition(-6 + stride * 1.5, -16 - Math.max(0, stride) * 4).setAngle(stride * 20);
+      c.legs[1].setPosition(7 - stride * 1.5, -16 - Math.max(0, -stride) * 4).setAngle(-stride * 20);
+      c.arms[0].setAngle(-stride * 17); c.arms[1].setAngle(stride * 17);
       c.body.y = walking ? -Math.abs(Math.sin(time / 85 + c.seed)) * 4 : 0;
       c.body.angle = walking ? Math.sin(time / 100 + c.seed) * 3 : 0;
+      const speaking = !this.frozen && !!c.member.speaking;
+      c.voiceRing.setVisible(speaking); c.talk.setVisible(speaking && !c.bubble);
+      const animate = speaking && !this.reducedMotion.matches;
+      c.voiceRing.setScale(animate ? 1.05 + Math.sin(time / 100) * .08 : 1);
+      c.talkBars.forEach((bar, i) => bar.setScale(1, animate ? .45 + Math.abs(Math.sin(time / 95 + i * .9)) * .65 : .7));
+      if (animate && !walking) { c.body.y = Math.sin(time / 95) * 1.5; c.body.angle = Math.sin(time / 160) * 1.2; }
     }
   }
   fit() {
@@ -199,8 +211,11 @@ export class OfficeScene extends Phaser.Scene {
         c.targetX = target.x; c.targetY = target.y;
         const avatarChanged = c.member.avatar !== m.avatar; c.member = m; if (avatarChanged) this.loadAvatar(c, m);
         c.name.setText(this.shortName(m.username) + (m.id === this.selfId ? ' (you)' : ''));
-        c.status.setFillStyle(m.sleeping ? 0xc1afed : 0x7ed7ad);
-        c.root.setAlpha(m.presence === 'offline' ? .5 : 1);
+        c.status.setFillStyle(m.sleeping ? 0xc1afed : m.presence === 'offline' && !m.inVoice ? 0x9298a7 : 0x7ed7ad);
+        // Invisible Discord presence must not fade the character you control.
+        c.root.setAlpha(m.presence === 'offline' && m.id !== this.selfId && !m.inVoice ? .5 : 1);
+        c.voiceName.setVisible(!!m.inVoice);
+        c.voiceName.setText(m.inVoice ? `${m.muted ? 'Muted' : m.speaking ? 'Speaking' : 'Voice'} · ${this.shortName(m.voiceChannelName ?? '')}` : '');
         c.zzz.setVisible(m.sleeping); c.bubble?.setVisible(!m.sleeping && m.room === ownRoom);
       });
     }
@@ -210,25 +225,30 @@ export class OfficeScene extends Phaser.Scene {
   private makeCharacter(m: Member, x: number, y: number): Character {
     const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0), shirt = [0x77ccbb, 0xb296dc, 0xdc8ca9, 0xd6b87d, 0x78aee0, 0xaba6ed][seed % 6];
     const root = this.add.container(x, y), shadow = this.add.ellipse(0, 0, 33, 14, 0x020308, 0.5), body = this.add.container(0, 0), person = this.add.graphics();
-    person.fillStyle(0x242336).fillRect(-9, -16, 7, 15).fillRect(3, -16, 7, 15);
-    person.fillStyle(0xbbb4cc).fillRect(-10, -4, 8, 4).fillRect(3, -4, 9, 4);
     person.fillStyle(shirt).fillRoundedRect(-12, -34, 25, 23, 4);
     person.fillStyle(Phaser.Display.Color.IntegerToColor(shirt).darken(20).color).fillRect(6, -30, 8, 17);
-    person.fillStyle(0xc6a38a).fillRect(-16, -29, 6, 14).fillRect(12, -26, 5, 13);
+    const leg = (x: number) => this.add.container(x, -16, [this.add.rectangle(0, 0, 7, 13, 0x242336).setOrigin(.5, 0), this.add.rectangle(0, 12, 9, 4, 0xc9c4d9).setOrigin(.5, 0)]);
+    const legs: Character['legs'] = [leg(-6), leg(7)];
+    const arm = (x: number, y: number) => this.add.container(x, y, [this.add.rectangle(0, 0, 6, 14, 0xc6a38a).setOrigin(.5, 0)]);
+    const arms: Character['arms'] = [arm(-14, -29), arm(14, -27)];
     const head = this.add.circle(0, -44, 15, 0x444159).setStrokeStyle(2, 0xc7c0dc);
+    const voiceRing = this.add.circle(0, -44, 20, 0x71e4ac, .07).setStrokeStyle(3, 0x71e4ac).setVisible(false);
     const initial = this.add.text(0, -44, Array.from(m.username)[0] ?? '?', { fontSize: '16px', fontFamily: 'Arial', color: '#ffffff' }).setOrigin(0.5);
     const name = this.add.text(0, 12, this.shortName(m.username), { fontFamily: 'Arial', fontSize: '14px', color: '#e9e4f8', backgroundColor: '#13101e', padding: { x: 5, y: 3 } }).setOrigin(0.5, 0);
     const status = this.add.circle(13, -35, 4, 0x7ed7ad).setStrokeStyle(1.5, 0x171321);
     const zzz = this.add.text(12, -78, 'Zzz', { fontFamily: 'Arial', fontSize: '19px', color: '#c1afed', fontStyle: 'italic' }).setVisible(m.sleeping);
-    body.add([person, head, initial, status]); root.add([shadow, body, name, zzz]);
-    const c: Character = { root, body, name, status, zzz, member: m, seed, targetX: x, targetY: y }; this.loadAvatar(c, m); return c;
+    const voiceName = this.add.text(0, 34, '', { fontFamily: 'Arial', fontSize: '11px', color: '#9ddbbb', backgroundColor: '#131c1b', padding: { x: 4, y: 2 } }).setOrigin(.5, 0).setVisible(false);
+    const talkBars = [0, 1, 2].map(i => this.add.rectangle(-8 + i * 8, 0, 4, 15, 0x8cf0b5).setOrigin(.5, 1));
+    const talk = this.add.container(0, -77, [this.add.rectangle(0, -7, 35, 24, 0x142d25).setStrokeStyle(1, 0x529f77), ...talkBars]).setVisible(false);
+    body.add([voiceRing, ...legs, arms[0], person, arms[1], head, initial, status]); root.add([shadow, body, name, zzz, voiceName, talk]);
+    const c: Character = { root, body, name, status, zzz, member: m, seed, targetX: x, targetY: y, voiceRing, talk, talkBars, voiceName, legs, arms }; this.loadAvatar(c, m); return c;
   }
   private loadAvatar(c: Character, m: Member) {
     if (!m.avatar) { c.body.getByName('avatar')?.destroy(); return; }
     const key = `avatar:${m.id}:${m.avatar}`;
     const show = () => {
       if (!c.root.scene || c.member.avatar !== m.avatar) return;
-      c.body.getByName('avatar')?.destroy(); c.body.addAt(this.add.image(0, -44, key).setDisplaySize(27, 27).setName('avatar'), 3);
+      c.body.getByName('avatar')?.destroy(); c.body.add(this.add.image(0, -44, key).setDisplaySize(27, 27).setName('avatar')); c.body.bringToTop(c.status);
     };
     if (this.textures.exists(key)) { show(); return; }
     const img = new Image(); img.crossOrigin = 'anonymous';

@@ -7,6 +7,13 @@ export function startMock(office: Office) {
     office.join({ id, username, avatar: `/avatars/${i % 12}.svg` }, { ...office.world.spawn(room, i), room, sleeping: room === 'Nap Room' });
     if (room === 'Nap Room') office.members.get(id)!.lastInput = Date.now() - office.config.idle_timeout_ms;
   });
+  office.voiceMonitor = { state: 'connected', channelId: 'demo-call', channelName: 'Demo call', detail: 'Simulated speaking indicators — no Discord audio or microphone is used.' };
+  for (const i of [0, 7]) office.discordVoiceState(`mock-${i}`, { channelId: 'demo-call', channelName: 'Demo call', muted: false });
+  const speakingTimer = setInterval(() => {
+    const phase = Date.now() % 6000;
+    office.speaking('mock-0', phase < 2400);
+    office.speaking('mock-7', phase > 3200 && phase < 5000);
+  }, 200);
   let step = 0;
   const timer = setInterval(() => {
     const id = `mock-${step % names.length}`, player = office.members.get(id)!;
@@ -17,5 +24,5 @@ export function startMock(office: Office) {
     }
     step++;
   }, 900);
-  return () => clearInterval(timer);
+  return () => { clearInterval(timer); clearInterval(speakingTimer); };
 }
