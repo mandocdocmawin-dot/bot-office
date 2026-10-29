@@ -8,7 +8,7 @@ import type { AuthOptions } from './auth.js';
 import type { Packet } from './protocol.js';
 const options: AuthOptions = { clientId: 'test-client', clientSecret: 'server-only-secret', redirectUri: 'http://localhost:5173/auth/callback', guildId: 'server-1', secret: 'test-session-secret-with-more-than-32-characters', webUrl: 'http://localhost:5173', mock: false };
 const cookie = (response: Response, name: string) => response.headers.getSetCookie().find(v => v.startsWith(`${name}=`))!.split(';')[0];
-async function fixture(nonMember = false, failExchange = false, rateLimit?: { stage: 'token_exchange' | 'profile' | 'guild_list'; response: () => Response }) {
+async function fixture(nonMember = false, failExchange = false, rateLimit?: { stage: 'token_exchange' | 'profile' | 'guild_list'; response: () => Response | Promise<Response> }) {
   const requests: { url: string; init?: RequestInit }[] = [];
   let limited = !!rateLimit;
   const provider = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -118,6 +118,63 @@ test('state is browser-bound and single-use; forged cookies cannot authenticate'
     const forged = await (await fetch(`${f.base}/api/session`, { headers: { Cookie: `${result.cookie}x` } })).json(); assert.equal(forged.user, null);
     const ws = new WebSocket(`${f.base.replace('http:', 'ws:')}/ws`, { headers: { Origin: options.webUrl } });
     await new Promise<void>(resolve => { ws.on('error', () => {}); ws.on('unexpected-response', (_req, res) => { assert.equal(res.statusCode, 401); res.resume(); ws.terminate(); resolve(); }); });
+  } finally { await f.app.close(); }
+});
+
+test('concurrent callbacks stop dispatching as soon as an in-flight request returns 429', async t => {
+  t.mock.method(console, 'error', () => {});
+  let reachedProvider!: () => void, returnRateLimit!: () => void, reachedCallbacks!: () => void;
+  const providerEntered = new Promise<void>(resolve => { reachedProvider = resolve; });
+  const providerResponse = new Promise<void>(resolve => { returnRateLimit = resolve; });
+  const callbacksEntered = new Promise<void>(resolve => { reachedCallbacks = resolve; });
+  const f = await fixture(false, false, { stage: 'token_exchange', response: async () => {
+    reachedProvider();
+    await providerResponse;
+    return Response.json({ retry_after: 1473 }, { status: 429 });
+  } });
+  try {
+    const original = f.app.auth.handle.bind(f.app.auth);
+    let callbacks = 0;
+    t.mock.method(f.app.auth, 'handle', (req, res, url) => {
+      const handled = original(req, res, url);
+      if (url.pathname === '/auth/callback' && ++callbacks === 2) reachedCallbacks();
+      return handled;
+    });
+    const [a, b] = await Promise.all([f.begin(), f.begin()]);
+    const callback = (flow: typeof a) => fetch(`${f.base}/auth/callback?state=${flow.state}&code=123`, { redirect: 'manual', headers: { Cookie: flow.cookie } });
+    const first = callback(a);
+    await providerEntered;
+    const second = callback(b);
+    await callbacksEntered;
+    assert.equal(f.requests.length, 1, 'only one provider request may be in flight');
+    returnRateLimit();
+    for (const response of await Promise.all([first, second])) {
+      assert.equal(response.headers.get('location'), `${options.webUrl}/?login_error=rate_limited`);
+      assert.ok(Number(response.headers.get('retry-after')) > 0);
+      assert.ok(!response.headers.getSetCookie().some(value => value.startsWith('office_session=')));
+    }
+    assert.equal(f.requests.length, 1, 'queued callback must not contact Discord during cooldown');
+  } finally { returnRateLimit(); await f.app.close(); }
+});
+
+test('an authenticated browser reuses its session without starting another OAuth flow', async () => {
+  const f = await fixture();
+  try {
+    const session = (await f.login()).cookie;
+    const count = f.requests.length;
+    const response = await fetch(`${f.base}/auth/login`, { redirect: 'manual', headers: { Cookie: session } });
+    assert.equal(response.headers.get('location'), options.webUrl);
+    assert.equal(response.headers.getSetCookie().length, 0);
+    assert.equal(f.requests.length, count);
+  } finally { await f.app.close(); }
+});
+
+test('concurrent successful logins still finish after the provider queue is released', async () => {
+  const f = await fixture();
+  try {
+    const results = await Promise.all(['123', '456', '789'].map(id => f.login(id)));
+    for (const result of results) assert.ok(result.cookie);
+    assert.equal(f.requests.length, 9);
   } finally { await f.app.close(); }
 });
 test('duplicate tabs replace old socket, reconnect restores position, logout invalidates session', async () => {

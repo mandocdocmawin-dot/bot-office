@@ -82,8 +82,8 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
   client.on(Events.ShardResume, () => { office.discord = { state: 'connected', detail: 'Discord reconnected. Channel activity moves your character.' }; const guild = client.guilds.cache.get(guildId); if (guild) speaking.sync(guild); });
   const login = () => client.login(token.trim()).catch((error: unknown) => {
     const description = error instanceof Error ? error.message : '';
-    if (/disallowed intents/i.test(description)) fail('Enable Server Members, Presence and Message Content intents in Developer Portal → Bot, then restart npm run dev.');
-    else if (/invalid.*token|token.*invalid/i.test(description)) fail('Discord rejected the Bot token. Reset it in Developer Portal → Bot and update DISCORD_TOKEN in .env.');
+    if (/disallowed intents/i.test(description)) fail('Enable Server Members, Presence and Message Content intents in Developer Portal → Bot, then restart the service (redeploy on Render).');
+    else if (/invalid.*token|token.*invalid/i.test(description)) fail('Discord rejected the Bot token. Update DISCORD_TOKEN from Developer Portal → Bot in the service environment (.env locally, Environment on Render).');
     else if (office.discord.state !== 'error') fail('Bot login failed. Check the Bot token, server invitation and enabled intents.');
     client.destroy();
   });
@@ -92,7 +92,7 @@ export function startDiscord(office: Office, token: string | undefined, guildId:
   client.rest.setToken(token.trim());
   void client.rest.get(Routes.guild(guildId)).then(() => { if (!stopped) return login(); }).catch((error: unknown) => {
     const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined;
-    if (status === 404 || status === 403) fail('Invite the bot to the server configured by GUILD_ID, then restart npm run dev.');
+    if (status === 404 || status === 403) fail('The bot cannot access GUILD_ID. Verify the server ID, invite the bot belonging to DISCORD_TOKEN to that server, then restart the service (redeploy on Render).');
     else if (status === 401) fail('Discord rejected DISCORD_TOKEN. Use the current token from Developer Portal → Bot.');
     else fail('Could not verify the bot server access. Check Discord connectivity and GUILD_ID.');
     client.destroy();

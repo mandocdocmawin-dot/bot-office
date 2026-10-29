@@ -10,6 +10,8 @@ export class Auth {
   private flows = new Map<string, Flow>();
   private cookieName = 'office_session';
   private oauthRetryAt = 0;
+  private oauthQueue: Promise<void> = Promise.resolve();
+  private oauthCooldown?: Awaited<ReturnType<typeof readOAuthCooldown>>;
   constructor(public options: AuthOptions, private request: typeof fetch = fetch, private now = () => Date.now(), public onInvalidate: (id: string) => void = () => {}) {}
   allowedOrigin(origin?: string) {
     const url = new URL(this.options.webUrl); if (origin === url.origin) return true;
@@ -55,13 +57,30 @@ export class Auth {
     this.redirect(res, `${this.options.webUrl}/?login_error=rate_limited`);
   }
   private async oauthRequest(url: string, init: RequestInit) {
-    const response = await this.request(url, init);
-    if (response.status === 429) {
-      const cooldown = await readOAuthCooldown(response, this.now());
-      this.oauthRetryAt = Math.max(this.oauthRetryAt, this.now() + cooldown.retryAfterSeconds * 1000);
-      throw new OAuthRateLimitError(cooldown);
+    // A callback can already be in progress when another callback receives 429.
+    // Check immediately before *every* provider request, including profile and
+    // membership lookups. Serialize dispatch so concurrent logins cannot race
+    // past a rate-limit response that is still being parsed.
+    const previous = this.oauthQueue;
+    let release!: () => void;
+    this.oauthQueue = new Promise<void>(resolve => { release = resolve; });
+    await previous;
+    try {
+      if (this.retryAfterSeconds() > 0 && this.oauthCooldown) {
+        throw new OAuthRateLimitError({ ...this.oauthCooldown, retryAfterSeconds: this.retryAfterSeconds() });
+      }
+      // Create the timeout at dispatch, not while waiting behind another login.
+      const response = await this.request(url, { ...init, signal: AbortSignal.timeout(10000) });
+      if (response.status === 429) {
+        const cooldown = await readOAuthCooldown(response, this.now());
+        this.oauthCooldown = cooldown;
+        this.oauthRetryAt = Math.max(this.oauthRetryAt, this.now() + cooldown.retryAfterSeconds * 1000);
+        throw new OAuthRateLimitError(cooldown);
+      }
+      return response;
+    } finally {
+      release();
     }
-    return response;
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
     const path = url.pathname;
@@ -77,7 +96,7 @@ export class Auth {
       this.setCookie(res, this.cookieName, '', 0); this.json(res, { ok: true }); return true;
     }
     if (path === '/auth/login' && req.method === 'GET') {
-      if (this.options.mock) { this.redirect(res, this.options.webUrl); return true; }
+      if (this.options.mock || this.session(req)) { this.redirect(res, this.options.webUrl); return true; }
       if (this.retryAfterSeconds() > 0) { this.cooldownRedirect(res); return true; }
       this.sweep(); if (this.flows.size >= 1000) { this.json(res, { error: 'Too many login attempts. Try again shortly.' }, 429); return true; }
       const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
@@ -97,7 +116,7 @@ export class Auth {
       let stage = 'token_exchange', status: number | null = null, reason = 'request_failed';
       try {
         const tokenResponse = await this.oauthRequest('https://discord.com/api/oauth2/token', {
-          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(10000),
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ client_id: this.options.clientId, client_secret: this.options.clientSecret, grant_type: 'authorization_code', code: url.searchParams.get('code')!, redirect_uri: this.options.redirectUri, code_verifier: flow.verifier })
         });
         status = tokenResponse.status;
@@ -107,7 +126,7 @@ export class Auth {
         if (!token.access_token || !['identify', 'guilds'].every(scope => token.scope?.split(' ').includes(scope))) throw new Error('Missing scopes');
         const headers = { Authorization: `Bearer ${token.access_token}` };
         stage = 'profile'; status = null; reason = 'request_failed';
-        const profileResponse = await this.oauthRequest('https://discord.com/api/v10/users/@me', { headers, signal: AbortSignal.timeout(10000) });
+        const profileResponse = await this.oauthRequest('https://discord.com/api/v10/users/@me', { headers });
         status = profileResponse.status;
         if (!profileResponse.ok) { reason = 'http_error'; throw new Error('Profile request failed'); }
         reason = 'invalid_profile_response';
@@ -115,7 +134,7 @@ export class Auth {
         let member = false, after = '';
         for (let page = 0; page < 10; page++) {
           stage = 'guild_list'; status = null; reason = 'request_failed';
-          const response = await this.oauthRequest(`https://discord.com/api/v10/users/@me/guilds?limit=200${after ? `&after=${after}` : ''}`, { headers, signal: AbortSignal.timeout(10000) });
+          const response = await this.oauthRequest(`https://discord.com/api/v10/users/@me/guilds?limit=200${after ? `&after=${after}` : ''}`, { headers });
           status = response.status;
           if (!response.ok) { reason = 'http_error'; throw new Error('Membership request failed'); }
           reason = 'invalid_guild_response';

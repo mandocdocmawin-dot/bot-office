@@ -176,11 +176,23 @@ Open `http://localhost:3001` and `http://localhost:3001/health`. Do not use the 
 
 If Discord returns HTTP 429 during token exchange, profile lookup, or server membership lookup, the office pauses new login attempts for the provider's `Retry-After` / `retry_after` duration. HTTP-date headers and fractional seconds are supported. When Discord omits usable retry information, the office uses a conservative 60-second cooldown. It does not repeatedly exchange the same authorization code or automatically retry sign-in; start a fresh login after the cooldown.
 
+Provider requests are dispatched one at a time, with a cooldown check immediately before each request. This also stops callbacks that were already in progress or waiting when another request received 429. A browser with a valid session returns directly to the office when it visits `/auth/login`, avoiding another code exchange.
+
 The login page shows when to try again and disables the sign-in link until then. Refreshing the page reads the remaining cooldown from the server. Existing office sessions keep working. The cooldown is shared by login attempts on this one server instance and resets if the process restarts; don't redeploy repeatedly to retry a blocked request.
 
 In **Render → service → Logs**, look for `[oauth] login_failed`. Rate-limit diagnostics include the failing stage, HTTP status, `retryAfterSeconds`, `retrySource` (`discord` or `fallback`), `retryAt` (UTC), `responseType`, and a provider scope or numeric error code if supplied. Raw provider bodies, credentials, tokens, callback codes, and cookies are never logged.
 
 This handling respects the provider's limit; it cannot remove an external IP restriction. If fresh logins still receive 429 after the reported cooldown, provide these sanitized diagnostics to Render/Discord support to investigate the host's outbound IP. The log alone does not prove a shared-IP issue. Render idle startup delays are separate from Discord OAuth rate limits. See [Discord's rate-limit documentation](https://docs.discord.com/developers/topics/rate-limits).
+
+### Repeated 429 or bot server-access errors: deployment checklist
+
+1. Wait until the latest `retryAt` before starting one fresh sign-in. For example, `2026-10-29T04:56:13.243Z` is **October 29, 12:56:13 PM in the Philippines/Singapore**. `retryAfterSeconds: 1473` means 24 minutes 33 seconds. Refreshing, resetting credentials, and redeploying do not clear Discord's restriction. A numeric `providerCode: 0` alone does not identify its cause.
+2. In **Render → Environment**, verify `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` belong to the same Discord application. `DISCORD_TOKEN` must be its **Bot token**, not the client secret. Keep these secrets private; don't paste them into logs or support tickets.
+3. Verify `GUILD_ID` is the intended **server ID** (Discord Developer Mode → right-click the server → Copy Server ID). In that application's **OAuth2 → URL Generator**, select **bot**, grant **View Channels** and **Read Message History** (plus **Connect** for the speaking monitor), then open the generated link and add the bot to this exact server. A user successfully signing into the website does not install the bot.
+4. In **Developer Portal → Bot → Privileged Gateway Intents**, enable **Server Members Intent** and **Presence Intent**. Enable **Message Content Intent** if `config.json` enables message previews. This fixes gateway access; it does not clear an OAuth token-exchange 429.
+5. Set `WEB_URL=https://bot-office-nwl0.onrender.com` and `DISCORD_REDIRECT_URI=https://bot-office-nwl0.onrender.com/auth/callback`. Add the identical callback in **Developer Portal → OAuth2 → Redirects**. After correcting configuration, deploy the updated code once and wait out any remaining provider cooldown. Keep one service instance; additional copies have independent in-memory cooldowns.
+6. Open `/health` and confirm `discord.state` is `connected`. HTTP 200 / `ready: true` confirms the web process is running even when the bot is disconnected. Try one fresh website login after the cooldown. These are separate checks: bot connection and user OAuth login must both work.
+7. If that login gets another token-exchange 429, collect its sanitized `[oauth] login_failed` line and the service's outbound ranges from **Render → service → Connect → Outbound**, then contact Render/Discord support. Render documents that regional outbound ranges are shared, but these logs cannot prove another tenant caused this restriction. Investigate before changing hosting or paying for dedicated outbound IPs. Reference: [Render outbound IP addresses](https://render.com/docs/outbound-ip-addresses).
 
 ## Configuration and architecture
 
