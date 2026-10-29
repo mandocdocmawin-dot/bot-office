@@ -62,6 +62,21 @@ test('non-members are rejected without a session and provider errors fail closed
     try { const result = await f.login(); assert.ok(result.callback.headers.get('location')!.includes(`login_error=${expected}`)); assert.equal(result.cookie, ''); } finally { await f.app.close(); }
   }
 });
+test('OAuth failures log the failing stage and status without credentials or callback data', async t => {
+  const log = t.mock.method(console, 'error', () => {});
+  const f = await fixture(false, true);
+  try {
+    const result = await f.login('private-authorization-code');
+    assert.ok(result.callback.headers.get('location')!.includes('login_error=failed'));
+    assert.equal(result.cookie, '');
+    assert.equal(log.mock.calls.length, 1);
+    const [prefix, details] = log.mock.calls[0].arguments as unknown as [string, string];
+    assert.equal(prefix, '[oauth] login_failed');
+    assert.deepEqual(JSON.parse(details), { stage: 'token_exchange', status: 400, reason: 'http_error' });
+    const output = JSON.stringify(log.mock.calls.map(call => call.arguments));
+    for (const privateValue of [options.clientSecret, options.secret, result.flow.state, result.flow.cookie, 'private-authorization-code']) assert.ok(!output.includes(privateValue));
+  } finally { await f.app.close(); }
+});
 test('state is browser-bound and single-use; forged cookies cannot authenticate', async () => {
   const f = await fixture();
   try {

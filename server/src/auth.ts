@@ -76,34 +76,51 @@ export class Auth {
       if (!state || bound !== state || !flow || flow.expires <= this.now()) { this.redirect(res, `${this.options.webUrl}/?login_error=invalid_state`); return true; }
       this.flows.delete(state);
       if (url.searchParams.has('error') || !url.searchParams.get('code')) { this.redirect(res, `${this.options.webUrl}/?login_error=cancelled`); return true; }
+      let stage = 'token_exchange', status: number | null = null, reason = 'request_failed';
       try {
         const tokenResponse = await this.request('https://discord.com/api/oauth2/token', {
           method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(10000),
           body: new URLSearchParams({ client_id: this.options.clientId, client_secret: this.options.clientSecret, grant_type: 'authorization_code', code: url.searchParams.get('code')!, redirect_uri: this.options.redirectUri, code_verifier: flow.verifier })
         });
-        if (!tokenResponse.ok) throw new Error('Exchange failed');
+        status = tokenResponse.status;
+        if (!tokenResponse.ok) { reason = 'http_error'; throw new Error('Exchange failed'); }
+        reason = 'invalid_token_response';
         const token = await tokenResponse.json() as { access_token?: string; scope?: string };
         if (!token.access_token || !['identify', 'guilds'].every(scope => token.scope?.split(' ').includes(scope))) throw new Error('Missing scopes');
         const headers = { Authorization: `Bearer ${token.access_token}` };
+        stage = 'profile'; status = null; reason = 'request_failed';
         const profileResponse = await this.request('https://discord.com/api/v10/users/@me', { headers, signal: AbortSignal.timeout(10000) });
-        if (!profileResponse.ok) throw new Error('Profile request failed');
+        status = profileResponse.status;
+        if (!profileResponse.ok) { reason = 'http_error'; throw new Error('Profile request failed'); }
+        reason = 'invalid_profile_response';
         const profile = await profileResponse.json() as { id: string; username: string; global_name?: string; avatar?: string; discriminator?: string };
         let member = false, after = '';
         for (let page = 0; page < 10; page++) {
+          stage = 'guild_list'; status = null; reason = 'request_failed';
           const response = await this.request(`https://discord.com/api/v10/users/@me/guilds?limit=200${after ? `&after=${after}` : ''}`, { headers, signal: AbortSignal.timeout(10000) });
-          if (!response.ok) throw new Error('Membership request failed');
+          status = response.status;
+          if (!response.ok) { reason = 'http_error'; throw new Error('Membership request failed'); }
+          reason = 'invalid_guild_response';
           const guilds = await response.json() as { id: string }[];
           if (guilds.some(g => g.id === this.options.guildId)) { member = true; break; }
           if (guilds.length < 200) break;
           after = guilds.at(-1)!.id;
         }
         if (!member) { this.redirect(res, `${this.options.webUrl}/?login_error=not_member`); return true; }
+        stage = 'identity'; status = null; reason = 'invalid_identity';
         if (!/^\d+$/.test(profile.id) || typeof profile.username !== 'string') throw new Error('Invalid identity');
         const defaultAvatar = Number((BigInt(profile.id) >> 22n) % 6n);
         const avatar = profile.avatar && /^[a-zA-Z0-9_]+$/.test(profile.avatar) ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=64` : `https://cdn.discordapp.com/embed/avatars/${defaultAvatar}.png`;
+        stage = 'session'; reason = 'session_creation_failed';
         this.createSession({ id: profile.id, username: profile.global_name || profile.username, avatar }, res);
         this.redirect(res, this.options.webUrl);
-      } catch { this.redirect(res, `${this.options.webUrl}/?login_error=failed`); }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'TimeoutError') reason = 'timeout';
+        // Only our fixed labels and HTTP status: never log provider bodies,
+        // request URLs, credentials, cookies, authorization codes, or tokens.
+        console.error('[oauth] login_failed', JSON.stringify({ stage, status, reason }));
+        this.redirect(res, `${this.options.webUrl}/?login_error=failed`);
+      }
       // Access/refresh tokens are local variables only; never sent to the client or retained.
       return true;
     }
