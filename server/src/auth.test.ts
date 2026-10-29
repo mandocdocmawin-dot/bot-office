@@ -8,10 +8,13 @@ import type { AuthOptions } from './auth.js';
 import type { Packet } from './protocol.js';
 const options: AuthOptions = { clientId: 'test-client', clientSecret: 'server-only-secret', redirectUri: 'http://localhost:5173/auth/callback', guildId: 'server-1', secret: 'test-session-secret-with-more-than-32-characters', webUrl: 'http://localhost:5173', mock: false };
 const cookie = (response: Response, name: string) => response.headers.getSetCookie().find(v => v.startsWith(`${name}=`))!.split(';')[0];
-async function fixture(nonMember = false, failExchange = false) {
+async function fixture(nonMember = false, failExchange = false, rateLimit?: { stage: 'token_exchange' | 'profile' | 'guild_list'; response: () => Response }) {
   const requests: { url: string; init?: RequestInit }[] = [];
+  let limited = !!rateLimit;
   const provider = (async (url: string | URL | Request, init?: RequestInit) => {
     const path = String(url); requests.push({ url: path, init });
+    const stage = path.endsWith('/oauth2/token') ? 'token_exchange' : path.endsWith('/users/@me') ? 'profile' : 'guild_list';
+    if (limited && stage === rateLimit?.stage) { limited = false; return rateLimit.response(); }
     if (path.endsWith('/oauth2/token')) {
       if (failExchange) return new Response('{}', { status: 400 });
       const body = init!.body as URLSearchParams; assert.equal(body.get('client_secret'), options.clientSecret); assert.ok(body.get('code_verifier'));
@@ -76,6 +79,34 @@ test('OAuth failures log the failing stage and status without credentials or cal
     const output = JSON.stringify(log.mock.calls.map(call => call.arguments));
     for (const privateValue of [options.clientSecret, options.secret, result.flow.state, result.flow.cookie, 'private-authorization-code']) assert.ok(!output.includes(privateValue));
   } finally { await f.app.close(); }
+});
+test('Discord 429s stop new logins and pending callbacks until cooldown expires, then permit a fresh login', async t => {
+  const log = t.mock.method(console, 'error', () => {});
+  for (const stage of ['token_exchange', 'profile', 'guild_list'] as const) {
+    const f = await fixture(false, false, { stage, response: () => Response.json({ retry_after: .01, global: true, message: 'private-provider-body' }, { status: 429 }) });
+    try {
+      const pending = await f.begin();
+      const first = await f.login();
+      assert.equal(first.callback.headers.get('location'), `${options.webUrl}/?login_error=rate_limited`);
+      assert.equal(first.cookie, '');
+      assert.equal(first.callback.headers.get('retry-after'), '1');
+      const requestCount = f.requests.length;
+      const blocked = await fetch(`${f.base}/auth/login`, { redirect: 'manual' });
+      assert.equal(blocked.headers.get('location'), `${options.webUrl}/?login_error=rate_limited`);
+      const blockedCallback = await fetch(`${f.base}/auth/callback?state=${pending.state}&code=123`, { redirect: 'manual', headers: { Cookie: pending.cookie } });
+      assert.equal(blockedCallback.headers.get('location'), `${options.webUrl}/?login_error=rate_limited`);
+      assert.equal(f.requests.length, requestCount, 'cooldown must not send more Discord requests');
+      const session = await (await fetch(`${f.base}/api/session`)).json();
+      assert.equal(session.loginRetryAfterSeconds, 1);
+      assert.equal(session.user, null);
+      const details = JSON.parse(log.mock.calls.at(-1)!.arguments[1]);
+      assert.equal(details.stage, stage); assert.equal(details.status, 429);
+      assert.equal(details.reason, 'rate_limited'); assert.equal(details.retryAfterSeconds, 1);
+      assert.equal(details.scope, 'global'); assert.ok(!JSON.stringify(details).includes('private-provider-body'));
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      const success = await f.login(); assert.ok(success.cookie); assert.equal(success.callback.headers.get('location'), options.webUrl);
+    } finally { await f.app.close(); }
+  }
 });
 test('state is browser-bound and single-use; forged cookies cannot authenticate', async () => {
   const f = await fixture();

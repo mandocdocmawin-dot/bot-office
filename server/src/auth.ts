@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Identity } from './protocol.js';
+import { OAuthRateLimitError, readOAuthCooldown } from './oauth-rate-limit.js';
 export interface AuthOptions { clientId: string; clientSecret: string; redirectUri: string; guildId: string; secret: string; webUrl: string; mock: boolean }
 interface Session { user: Identity; expires: number }
 interface Flow { verifier: string; expires: number }
@@ -8,6 +9,7 @@ export class Auth {
   private sessions = new Map<string, Session>();
   private flows = new Map<string, Flow>();
   private cookieName = 'office_session';
+  private oauthRetryAt = 0;
   constructor(public options: AuthOptions, private request: typeof fetch = fetch, private now = () => Date.now(), public onInvalidate: (id: string) => void = () => {}) {}
   allowedOrigin(origin?: string) {
     const url = new URL(this.options.webUrl); if (origin === url.origin) return true;
@@ -47,12 +49,26 @@ export class Auth {
   revokeUser(userId: string) { for (const [id, session] of this.sessions) if (session.user.id === userId) this.sessions.delete(id); this.onInvalidate(userId); }
   private redirect(res: ServerResponse, url: string) { res.writeHead(302, { Location: url, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(); }
   private json(res: ServerResponse, data: unknown, status = 200) { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); }
+  private retryAfterSeconds() { return Math.max(0, Math.ceil((this.oauthRetryAt - this.now()) / 1000)); }
+  private cooldownRedirect(res: ServerResponse) {
+    res.setHeader('Retry-After', String(this.retryAfterSeconds()));
+    this.redirect(res, `${this.options.webUrl}/?login_error=rate_limited`);
+  }
+  private async oauthRequest(url: string, init: RequestInit) {
+    const response = await this.request(url, init);
+    if (response.status === 429) {
+      const cooldown = await readOAuthCooldown(response, this.now());
+      this.oauthRetryAt = Math.max(this.oauthRetryAt, this.now() + cooldown.retryAfterSeconds * 1000);
+      throw new OAuthRateLimitError(cooldown);
+    }
+    return response;
+  }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
     const path = url.pathname;
     if (path === '/api/session' && req.method === 'GET') {
       let user = this.session(req);
       if (this.options.mock && !user) { user = { id: `guest-${randomBytes(6).toString('hex')}`, username: 'You (demo)', avatar: '/avatars/0.svg' }; this.createSession(user, res); }
-      this.json(res, { user: user ?? null, mode: this.options.mock ? 'mock' : 'multiplayer' }); return true;
+      this.json(res, { user: user ?? null, mode: this.options.mock ? 'mock' : 'multiplayer', loginRetryAfterSeconds: this.retryAfterSeconds() }); return true;
     }
     if (path === '/auth/logout' && req.method === 'POST') {
       if (!this.allowedOrigin(req.headers.origin)) { this.json(res, { error: 'Invalid origin' }, 403); return true; }
@@ -62,6 +78,7 @@ export class Auth {
     }
     if (path === '/auth/login' && req.method === 'GET') {
       if (this.options.mock) { this.redirect(res, this.options.webUrl); return true; }
+      if (this.retryAfterSeconds() > 0) { this.cooldownRedirect(res); return true; }
       this.sweep(); if (this.flows.size >= 1000) { this.json(res, { error: 'Too many login attempts. Try again shortly.' }, 429); return true; }
       const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
       this.flows.set(state, { verifier, expires: this.now() + 5 * 60 * 1000 });
@@ -76,9 +93,10 @@ export class Auth {
       if (!state || bound !== state || !flow || flow.expires <= this.now()) { this.redirect(res, `${this.options.webUrl}/?login_error=invalid_state`); return true; }
       this.flows.delete(state);
       if (url.searchParams.has('error') || !url.searchParams.get('code')) { this.redirect(res, `${this.options.webUrl}/?login_error=cancelled`); return true; }
+      if (this.retryAfterSeconds() > 0) { this.cooldownRedirect(res); return true; }
       let stage = 'token_exchange', status: number | null = null, reason = 'request_failed';
       try {
-        const tokenResponse = await this.request('https://discord.com/api/oauth2/token', {
+        const tokenResponse = await this.oauthRequest('https://discord.com/api/oauth2/token', {
           method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(10000),
           body: new URLSearchParams({ client_id: this.options.clientId, client_secret: this.options.clientSecret, grant_type: 'authorization_code', code: url.searchParams.get('code')!, redirect_uri: this.options.redirectUri, code_verifier: flow.verifier })
         });
@@ -89,7 +107,7 @@ export class Auth {
         if (!token.access_token || !['identify', 'guilds'].every(scope => token.scope?.split(' ').includes(scope))) throw new Error('Missing scopes');
         const headers = { Authorization: `Bearer ${token.access_token}` };
         stage = 'profile'; status = null; reason = 'request_failed';
-        const profileResponse = await this.request('https://discord.com/api/v10/users/@me', { headers, signal: AbortSignal.timeout(10000) });
+        const profileResponse = await this.oauthRequest('https://discord.com/api/v10/users/@me', { headers, signal: AbortSignal.timeout(10000) });
         status = profileResponse.status;
         if (!profileResponse.ok) { reason = 'http_error'; throw new Error('Profile request failed'); }
         reason = 'invalid_profile_response';
@@ -97,7 +115,7 @@ export class Auth {
         let member = false, after = '';
         for (let page = 0; page < 10; page++) {
           stage = 'guild_list'; status = null; reason = 'request_failed';
-          const response = await this.request(`https://discord.com/api/v10/users/@me/guilds?limit=200${after ? `&after=${after}` : ''}`, { headers, signal: AbortSignal.timeout(10000) });
+          const response = await this.oauthRequest(`https://discord.com/api/v10/users/@me/guilds?limit=200${after ? `&after=${after}` : ''}`, { headers, signal: AbortSignal.timeout(10000) });
           status = response.status;
           if (!response.ok) { reason = 'http_error'; throw new Error('Membership request failed'); }
           reason = 'invalid_guild_response';
@@ -115,6 +133,10 @@ export class Auth {
         this.createSession({ id: profile.id, username: profile.global_name || profile.username, avatar }, res);
         this.redirect(res, this.options.webUrl);
       } catch (error) {
+        if (error instanceof OAuthRateLimitError) {
+          console.error('[oauth] login_failed', JSON.stringify({ stage, status: 429, reason: 'rate_limited', ...error.cooldown, retryAt: new Date(this.oauthRetryAt).toISOString() }));
+          this.cooldownRedirect(res); return true;
+        }
         if (error instanceof Error && error.name === 'TimeoutError') reason = 'timeout';
         // Only our fixed labels and HTTP status: never log provider bodies,
         // request URLs, credentials, cookies, authorization codes, or tokens.

@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       port: 5174,
       strictPort: true,
-      allowedHosts: ['realized-ppm-direction-met.trycloudflare.com'],
+      allowedHosts: ['https://thesaurus-idol-calculator-suggested.trycloudflare.com'],
       proxy: {
         '/ws': { target, ws: true },
         '/api': target,

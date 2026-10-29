@@ -172,6 +172,16 @@ docker run --rm --init -p 127.0.0.1:3001:10000 -e WEB_URL=http://localhost:3001 
 
 Open `http://localhost:3001` and `http://localhost:3001/health`. Do not use the mock command on Render.
 
+## Discord login rate limits on Render
+
+If Discord returns HTTP 429 during token exchange, profile lookup, or server membership lookup, the office pauses new login attempts for the provider's `Retry-After` / `retry_after` duration. HTTP-date headers and fractional seconds are supported. When Discord omits usable retry information, the office uses a conservative 60-second cooldown. It does not repeatedly exchange the same authorization code or automatically retry sign-in; start a fresh login after the cooldown.
+
+The login page shows when to try again and disables the sign-in link until then. Refreshing the page reads the remaining cooldown from the server. Existing office sessions keep working. The cooldown is shared by login attempts on this one server instance and resets if the process restarts; don't redeploy repeatedly to retry a blocked request.
+
+In **Render → service → Logs**, look for `[oauth] login_failed`. Rate-limit diagnostics include the failing stage, HTTP status, `retryAfterSeconds`, `retrySource` (`discord` or `fallback`), `retryAt` (UTC), `responseType`, and a provider scope or numeric error code if supplied. Raw provider bodies, credentials, tokens, callback codes, and cookies are never logged.
+
+This handling respects the provider's limit; it cannot remove an external IP restriction. If fresh logins still receive 429 after the reported cooldown, provide these sanitized diagnostics to Render/Discord support to investigate the host's outbound IP. The log alone does not prove a shared-IP issue. Render idle startup delays are separate from Discord OAuth rate limits. See [Discord's rate-limit documentation](https://docs.discord.com/developers/topics/rate-limits).
+
 ## Configuration and architecture
 
 Root `config.json` is the shared source for room names, coordinates, neon colors, door rectangles and furniture collision rectangles. The web app imports these public map settings; there are no secrets in this file. Room geometry is the original nine-room layout, projected isometrically:

@@ -12,17 +12,33 @@ async function boot() {
   try {
     const response = await fetch(api('/api/session'), { credentials: 'include' });
     if (!response.ok) throw new Error('Session unavailable');
-    const session = await response.json() as { user: Identity | null; mode: string };
-    if (!session.user) { login(); return; }
+    const session = await response.json() as { user: Identity | null; mode: string; loginRetryAfterSeconds?: number };
+    if (!session.user) { login(undefined, session.loginRetryAfterSeconds); return; }
     office(session.user, session.mode === 'mock');
   } catch { login('The office server is unavailable. Start npm run mock or npm run dev, then try again.'); }
 }
-function login(error?: string) {
+function login(error?: string, retryAfterSeconds = 0) {
   const messages: Record<string, string> = { not_member: 'You must be a member of the server', cancelled: 'Discord sign-in was cancelled. You can try again.', invalid_state: 'Your sign-in link expired. Please try again.', failed: 'Discord sign-in failed. Check the application settings and try again.' };
   const code = new URLSearchParams(location.search).get('login_error') ?? '';
   app.innerHTML = `<main class="login-page"><div class="login-card"><div class="brand"><span class="brand-mark">◉</span>discord office</div><h1>Your people.<br>Your little office.</h1><p>A shared space to work, wander, and hang out with your Discord server.</p><p id="login-error" role="alert"></p><a id="discord-login" class="login-button">Continue with Discord</a><p class="login-privacy">We request only your profile and server list to verify membership. Your display name, avatar, and position appear to people in this office. Room chat disappears after five seconds and is never stored or logged. Log out any time.</p><button class="text-button" id="retry">Refresh connection</button></div><div class="login-art" aria-hidden="true"><span>⌂</span><p>One server. Under one roof.</p></div></main>`;
   el('login-error').textContent = error || messages[code] || '';
   el<HTMLAnchorElement>('discord-login').href = api('/auth/login');
+  if (code === 'rate_limited') el('login-error').textContent = 'Discord temporarily limited sign-in requests. You can try signing in again.';
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    const link = el<HTMLAnchorElement>('discord-login'), message = el('login-error');
+    const retryAt = Date.now() + retryAfterSeconds * 1000;
+    message.textContent = `Discord is limiting sign-in requests. Please try again after ${new Date(retryAt).toLocaleTimeString()}.`;
+    link.removeAttribute('href'); link.setAttribute('aria-disabled', 'true');
+    link.textContent = 'Discord sign-in temporarily unavailable';
+    const enableWhenReady = () => {
+      const remaining = retryAt - Date.now();
+      if (remaining > 0) { window.setTimeout(enableWhenReady, Math.min(remaining, 60_000)); return; }
+      if (!link.isConnected) return;
+      link.href = api('/auth/login'); link.removeAttribute('aria-disabled'); link.textContent = 'Continue with Discord';
+      message.textContent = 'You can try signing in again.';
+    };
+    enableWhenReady();
+  }
   el('retry').onclick = () => location.reload();
 }
 function office(user: Identity, mock: boolean) {
