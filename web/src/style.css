@@ -12,3 +12,4 @@
 
 #voice-status{margin:-5px 0 14px;padding:8px 12px;background:#302a22;color:#dfc59f;border-radius:5px;font-size:11px}#voice-status.linked{background:#152a23;color:#9cd9b9}.member-state.speaking{color:#8be4b0;font-weight:600}.speaking-avatar{outline:2px solid #77dfaa;outline-offset:2px}
 .login-button[aria-disabled="true"]{background:#39334f;color:#e9e4f8;cursor:wait}
+.activity-connection{min-height:100dvh;display:grid;place-items:center;padding:32px 24px}.activity-connection section{width:min(100%,520px)}.activity-connection .brand{margin-bottom:48px}.activity-connection h1{font-size:clamp(28px,5vw,40px);line-height:1.15;letter-spacing:-.03em;margin:0 0 20px}.activity-connection p{font-size:16px;line-height:1.7;overflow-wrap:anywhere}.activity-connection [role="timer"]{font-variant-numeric:tabular-nums;color:#b6acf0}.activity-connection button{margin-top:20px;min-height:44px}.activity-connection [hidden]{display:none}

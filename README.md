@@ -234,7 +234,7 @@ A full ws(s) URL is also accepted. Prefer same-origin proxying: cookies remain o
 
 ## Launch inside Discord as an Activity
 
-The office detects a Discord Activity launch and signs in through the official Embedded App SDK inside Discord. The server exchanges the SDK code and checks the profile and configured server membership before creating an office session. Normal browser and mock mode remain available for local debugging.
+The office detects a Discord Activity launch and connects automatically through the official Embedded App SDK inside Discord. It never displays the browser login page or a Join/Login button inside an Activity. Provider cooldowns show a waiting screen with a countdown and reconnect automatically after the server's deadline; other failures show a connection retry action. The server exchanges the SDK code and checks the profile and configured server membership before creating an office session. Normal browser and mock mode remain available for local debugging.
 
 1. Deploy this updated code to your Render service. In Render Environment use the same current `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_TOKEN` and `GUILD_ID` that work locally. Local `.env` changes are not copied to Render. Keep the production `WEB_URL` and `DISCORD_REDIRECT_URI` values from `render.yaml`.
 2. Open your application in [Discord Developer Portal](https://discord.com/developers/applications). Under **Activities → Settings**, turn on **Enable Activities**. Discord automatically creates the default **Launch** Entry Point command; keep its default Discord handler.
@@ -252,7 +252,7 @@ The office detects a Discord Activity launch and signs in through the official E
 
 No extra `VITE_` client ID is required: `/api/activity/config` supplies only the public application ID and login cooldown. Activity API and WebSocket URLs always use the Discord proxy origin, even if browser-specific `VITE_API_BASE_URL` or `VITE_WS_URL` overrides exist.
 
-Activity sessions use a separate signed HttpOnly cookie with `SameSite=None; Secure; Partitioned` and the application's exact `clientId.discordsays.com` domain. Only that application's proxy origin can submit Activity token exchanges. Server membership is checked with Discord's API, not client-supplied user or guild IDs. Logout clears the partitioned session and retains the SDK launch parameters.
+Activity sessions use a separate signed HttpOnly cookie with `SameSite=None; Secure; Partitioned` and the application's exact `clientId.discordsays.com` domain. Only that application's proxy origin can submit Activity token exchanges. Server membership is checked with Discord's API, not client-supplied user or guild IDs. Inside Discord, close the Activity to leave; the browser-only Log out control is hidden. Sessions expire after eight hours or a server restart.
 
 Unlike standalone browser login, Activity login briefly sends the OAuth access token to the SDK's `authenticate` command in browser memory. It is never put in localStorage, URLs, logs or office snapshots. Client secrets and bot tokens stay on the server. Activity and browser login share the same provider cooldown; switching to Activity does not bypass a Discord rate limit.
 
