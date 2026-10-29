@@ -18,6 +18,7 @@ export function mediaProviderUrl(value: string): URL | undefined {
                 'media.discordapp.net'
             ].includes(host) ||
             /^(?:media\d*|i)\.giphy\.com$/.test(host) ||
+            /^images-ext-\d+\.discordapp\.net$/.test(host) ||
             /^(?:media\d*|c)\.tenor\.com$/.test(host) ||
             /^(?:static\d*|media\d*)\.klipy\.com$/.test(host)
         if (allowed && url.protocol === 'https:' && !url.username && !url.password && !url.port) {

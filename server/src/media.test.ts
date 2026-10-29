@@ -86,6 +86,16 @@ describe('media resolution', () => {
         expect(request).toHaveBeenCalledTimes(1)
     })
 
+    it('loads Discord picker image proxies but rejects lookalike hosts', async () => {
+        const proxy = 'https://images-ext-1.discordapp.net/external/hash/https/media.tenor.com/test/tenor.gif'
+        expect(mediaProviderUrl(proxy)).toBeDefined()
+        expect(mediaProviderUrl('https://images-ext-1.discordapp.net.evil.example/test.gif')).toBeUndefined()
+        const request = vi
+            .fn<typeof fetch>()
+            .mockResolvedValue(new Response('GIF89a', { headers: { 'Content-Type': 'image/gif' } }))
+        expect((await loadMediaImage(proxy, request)).body.toString()).toBe('GIF89a')
+    })
+
     it('rejects HTML and large responses instead of serving them as images', async () => {
         const html = vi
             .fn<typeof fetch>()

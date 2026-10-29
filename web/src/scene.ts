@@ -578,6 +578,7 @@ export class OfficeScene extends Phaser.Scene {
         if (/cdn\.discordapp\.com\/attachments\//i.test(trimmed)) {
             return true
         }
+        if (/^https:\/\/images-ext-\d+\.discordapp\.net\//i.test(trimmed)) return true
         return false
     }
 
