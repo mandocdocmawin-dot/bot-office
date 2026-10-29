@@ -18,6 +18,8 @@ Office runs directly inside Discord client via Embedded App SDK.
 - Session cookie: `office_activity_session` with `SameSite=None; Secure; Partitioned; Domain=${clientId}.discordsays.com`.
 - Strict origin check: only requests from `${clientId}.discordsays.com` accepted.
 - Avatars routed through `/discord-cdn/` sandbox proxy.
+- GIF bubbles use the authenticated, same-origin `/api/media/image` route under the existing `/` URL mapping. The Activity never loads GIF provider URLs directly. Giphy links resolve from their public GIF id; Tenor/Klipy pages use image metadata. Only supported provider hosts and raster image types are accepted, redirects are checked, and downloads are bounded to 8 MiB with four distinct concurrent downloads. Viewers of the same GIF share its in-flight download. A loaded GIF stays visible for the full configured bubble duration.
+- Chat typing shares the throttled activity signal with keyboard/pointer events, so typing a GIF link does not flood the WebSocket.
 
 ## Session Resumption
 

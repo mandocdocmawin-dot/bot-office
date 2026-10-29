@@ -9,7 +9,7 @@ import { ROOT } from './config.js'
 import type { Config } from './config.js'
 import { startMock } from './mock.js'
 import { GameLoop } from './loop.js'
-import { isMediaUrl, resolveMediaUrl } from './media.js'
+import { isMediaUrl, resolveMediaUrl, loadMediaImage, mediaProviderUrl } from './media.js'
 import type { ClientPacket, Member, Packet } from './protocol.js'
 
 export function parsePacket(raw: string): ClientPacket | undefined {
@@ -82,6 +82,7 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
         }
     }
     const auth = new Auth(options, request)
+    const mediaLoads = new Map<string, ReturnType<typeof loadMediaImage>>()
     const office = new Office(config, options.mock ? 'mock' : 'multiplayer', async (id, room, text) => {
         let broadcastText = text
         if (isMediaUrl(text)) {
@@ -138,6 +139,51 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                 const resolved = await resolveMediaUrl(target)
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({ url: resolved }))
+                return
+            }
+            if (url.pathname === '/api/media/image') {
+                res.setHeader('Cache-Control', 'no-store')
+                if (req.method !== 'GET' && req.method !== 'HEAD') {
+                    res.writeHead(405)
+                    res.end()
+                    return
+                }
+                if (!auth.session(req)) {
+                    res.writeHead(401)
+                    res.end()
+                    return
+                }
+                const target = url.searchParams.get('url')
+                if (!target || target.length > 2000 || !mediaProviderUrl(target)) {
+                    res.writeHead(400)
+                    res.end()
+                    return
+                }
+                let loading = mediaLoads.get(target)
+                if (!loading) {
+                    if (mediaLoads.size >= 4) {
+                        res.writeHead(503)
+                        res.end()
+                        return
+                    }
+                    loading = loadMediaImage(target)
+                    mediaLoads.set(target, loading)
+                    // Viewers of the same bubble share its in-flight download.
+                    void loading.finally(() => mediaLoads.delete(target)).catch(() => {})
+                }
+                try {
+                    const image = await loading
+                    res.writeHead(200, {
+                        'Content-Type': image.type,
+                        'Content-Length': image.body.byteLength,
+                        'Cache-Control': 'private, max-age=300'
+                    })
+                    res.end(req.method === 'HEAD' ? undefined : image.body)
+                } catch {
+                    console.warn('[office] media_proxy_failed')
+                    res.writeHead(502)
+                    res.end()
+                }
                 return
             }
             if (await auth.handle(req, res, url)) {
@@ -205,10 +251,15 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                     try {
                         const rejected = JSON.parse(data.toString())
                         if (rejected?.type === 'chat' && typeof rejected.text === 'string') {
-                            send(ws, { type: 'error', message: 'Message too long. Use up to 80 characters for text or 500 for a single link.' })
+                            send(ws, {
+                                type: 'error',
+                                message: 'Message too long. Use up to 80 characters for text or 500 for a single link.'
+                            })
                             return
                         }
-                    } catch { /* Invalid non-chat packets retain the protocol close below. */ }
+                    } catch {
+                        /* Invalid non-chat packets retain the protocol close below. */
+                    }
                     ws.close(1008, 'Invalid input')
                     return
                 }

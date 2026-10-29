@@ -688,7 +688,7 @@ test('the reported Giphy page resolves to an image while the socket keeps receiv
     const f = await fixture()
     const originalFetch = globalThis.fetch
     const page = 'https://giphy.com/gifs/link-the-legend-of-zelda-NVBR6cLvUjV9C'
-    const image = 'https://media4.giphy.com/media/NVBR6cLvUjV9C/giphy.gif'
+    const image = 'https://media.giphy.com/media/NVBR6cLvUjV9C/giphy.gif'
     const provider = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
         if (String(input) === page) return Promise.resolve(new Response(`<img src="${image}">`))
         return originalFetch(input, init)
@@ -704,6 +704,73 @@ test('the reported Giphy page resolves to an image while the socket keeps receiv
         assert.equal(ws.readyState, WebSocket.OPEN)
         ws.close()
     } finally {
+        provider.mockRestore()
+        await f.app.close()
+    }
+})
+
+test('same-origin image route requires a session, serves GIF bytes and contains provider failures', async () => {
+    const f = await fixture()
+    const originalFetch = globalThis.fetch
+    const image = 'https://media.giphy.com/media/NVBR6cLvUjV9C/giphy.gif'
+    const gif = Buffer.from('GIF89a')
+    let fail = false
+    const provider = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        if (String(input) === image) {
+            if (fail) return Promise.reject(new Error('provider failed'))
+            return Promise.resolve(new Response(gif, { headers: { 'Content-Type': 'image/gif' } }))
+        }
+        return originalFetch(input, init)
+    })
+    try {
+        const endpoint = `${f.base}/api/media/image?url=${encodeURIComponent(image)}`
+        assert.equal((await fetch(endpoint)).status, 401)
+        const session = (await f.login()).cookie
+        const headers = { Cookie: session }
+        const response = await fetch(endpoint, { headers })
+        assert.equal(response.status, 200)
+        assert.equal(response.headers.get('content-type'), 'image/gif')
+        assert.match(response.headers.get('cache-control')!, /private/)
+        assert.deepEqual(Buffer.from(await response.arrayBuffer()), gif)
+        assert.equal((await fetch(`${f.base}/api/media/image?url=http://127.0.0.1/private`, { headers })).status, 400)
+        fail = true
+        assert.equal((await fetch(endpoint, { headers })).status, 502)
+        assert.equal((await fetch(`${f.base}/health`)).status, 200)
+    } finally {
+        provider.mockRestore()
+        await f.app.close()
+    }
+})
+
+test('viewers of one GIF share a single in-flight provider download', async () => {
+    const f = await fixture()
+    const originalFetch = globalThis.fetch
+    const image = 'https://media.giphy.com/media/shared-preview/giphy.gif'
+    let release!: () => void
+    const ready = new Promise<void>((resolve) => { release = resolve })
+    let downloads = 0
+    let arrivals = 0
+    f.app.server.on('request', (req) => { if (req.url?.startsWith('/api/media/image')) arrivals++ })
+    const provider = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        if (String(input) === image) {
+            downloads++
+            await ready
+            return new Response('GIF89a', { headers: { 'Content-Type': 'image/gif' } })
+        }
+        return originalFetch(input, init)
+    })
+    try {
+        const session = (await f.login()).cookie
+        const responses = Promise.all(Array.from({ length: 6 }, () => fetch(`${f.base}/api/media/image?url=${encodeURIComponent(image)}`, { headers: { Cookie: session } })))
+        await vi.waitFor(() => assert.equal(arrivals, 6))
+        assert.equal(downloads, 1)
+        release()
+        for (const response of await responses) {
+            assert.equal(response.status, 200)
+            assert.equal(await response.text(), 'GIF89a')
+        }
+    } finally {
+        release()
         provider.mockRestore()
         await f.app.close()
     }

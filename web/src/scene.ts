@@ -602,49 +602,37 @@ export class OfficeScene extends Phaser.Scene {
         wrap.append(box)
         wrap.append(arrow)
 
-        const isDirect = /\.(gif|webp|png|jpe?g)(\?.*)?$/i.test(url) || /(static|media)[0-9]*\./i.test(url)
-        if (isDirect) {
-            img.src = url
-        } else {
-            fetch(`/api/media/resolve?url=${encodeURIComponent(url)}`)
-                .then((r) => r.json())
-                .then((data: { url?: string }) => {
-                    if (data?.url && c.bubble === dom) {
-                        img.src = data.url
-                    }
-                })
-                .catch(() => {
-                    if (c.bubble === dom) {
-                        img.src = url
-                    }
-                })
-        }
-
         const dom = this.add.dom(0, -68, wrap).setOrigin(0.5, 1)
         dom.pointerEvents = 'none'
-
-        img.onload = () => {
+        const unavailable = () => {
             if (c.bubble === dom) {
-                dom.updateSize()
-            }
-        }
-        img.onerror = () => {
-            if (c.bubble === dom) {
+                expiry.remove()
                 console.warn('[office] media_load_failed')
                 dom.destroy()
                 c.bubble = undefined
                 this.createTextBubble(c, 'GIF unavailable', duration)
             }
         }
+        let expiry = this.time.delayedCall(12000, unavailable)
+
+        img.onload = () => {
+            if (c.bubble === dom) {
+                expiry.remove()
+                dom.updateSize()
+                expiry = this.time.delayedCall(duration, () => {
+                    if (c.bubble === dom) {
+                        dom.destroy()
+                        c.bubble = undefined
+                    }
+                })
+            }
+        }
+        img.onerror = unavailable
 
         c.root.add(dom)
         c.bubble = dom
-        this.time.delayedCall(duration, () => {
-            if (c.bubble === dom) {
-                dom.destroy()
-                c.bubble = undefined
-            }
-        })
+        // Keep the image on the Activity origin so Discord's CSP allows it.
+        img.src = `/api/media/image?url=${encodeURIComponent(url)}`
     }
     clearBubbles() {
         for (const c of this.people.values()) {

@@ -6,6 +6,7 @@ import { eventBus } from './events'
 import { ActivityCooldownError, activityAvatar, activityLogin, inActivity, watchActivitySpeaking } from './activity'
 import { ActivitySpeaking } from './speaking'
 import { KeyboardMovement, movementKey } from './keyboard-movement'
+import { createActivitySignal } from './activity-signal'
 import { connectActivity } from './activity-connection'
 import './style.css'
 
@@ -132,6 +133,7 @@ function office(user: Identity, mock: boolean) {
     let rosterKey = ''
     let chatVisible = false
     const keys = new KeyboardMovement(({ x, y }) => send({ type: 'input', dx: x, dy: y }))
+    const activitySignal = createActivitySignal(() => send({ type: 'wake' }))
     const activitySpeaking = new ActivitySpeaking()
     let activityVoice = false
     if (inActivity && !mock) {
@@ -335,7 +337,7 @@ function office(user: Identity, mock: boolean) {
         const max = isUrl ? 500 : 80
         input.value = [...input.value].slice(0, max).join('')
         el('chat-count').textContent = isUrl ? 'GIF / Link' : `${[...input.value].length}/80`
-        send({ type: 'wake' })
+        activitySignal()
     }
     el('search').addEventListener('input', () => {
         query = el<HTMLInputElement>('search').value.trim().toLocaleLowerCase()
@@ -399,13 +401,6 @@ function office(user: Identity, mock: boolean) {
     eventBus.onEvent('office:zoom', ({ zoom }) => {
         el('zoom-value').textContent = `${zoom}%`
     })
-    let lastActivitySignal = 0
-    const activitySignal = () => {
-        if (Date.now() - lastActivitySignal > 900) {
-            lastActivitySignal = Date.now()
-            send({ type: 'wake' })
-        }
-    }
     window.addEventListener('pointerdown', activitySignal)
     window.addEventListener('wheel', activitySignal, { passive: true })
     window.addEventListener('keydown', activitySignal)
@@ -504,7 +499,8 @@ function office(user: Identity, mock: boolean) {
                 notice.textContent = packet.message
                 notice.hidden = false
                 setTimeout(() => {
-                    if (socket.readyState === WebSocket.OPEN && notice.textContent === packet.message) notice.hidden = true
+                    if (socket.readyState === WebSocket.OPEN && notice.textContent === packet.message)
+                        notice.hidden = true
                 }, 5000)
                 return
             }
