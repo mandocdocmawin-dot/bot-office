@@ -3,12 +3,19 @@ import type { ClientPacket, Identity, Packet, Room, Snapshot } from '../../serve
 import { rooms, colorCSS } from './rooms';
 import { OfficeScene } from './scene';
 import './style.css';
-const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+import { activityLogin, activityAvatar, inActivity } from './activity';
+const apiBase = (inActivity ? '' : import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const api = (path: string) => `${apiBase}${path}`;
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 async function boot() {
   if (new URLSearchParams(location.search).has('logged_out')) { login(); return; }
+  if (inActivity) {
+    app.textContent = 'Connecting to your Discord office…';
+    try { office(await activityLogin(), false); }
+    catch (error) { login(error instanceof Error ? error.message : 'Could not connect to Discord. Relaunch the Activity to try again.'); }
+    return;
+  }
   try {
     const response = await fetch(api('/api/session'), { credentials: 'include' });
     if (!response.ok) throw new Error('Session unavailable');
@@ -23,6 +30,11 @@ function login(error?: string, retryAfterSeconds = 0) {
   app.innerHTML = `<main class="login-page"><div class="login-card"><div class="brand"><span class="brand-mark">◉</span>discord office</div><h1>Your people.<br>Your little office.</h1><p>A shared space to work, wander, and hang out with your Discord server.</p><p id="login-error" role="alert"></p><a id="discord-login" class="login-button">Continue with Discord</a><p class="login-privacy">We request only your profile and server list to verify membership. Your display name, avatar, and position appear to people in this office. Room chat disappears after five seconds and is never stored or logged. Log out any time.</p><button class="text-button" id="retry">Refresh connection</button></div><div class="login-art" aria-hidden="true"><span>⌂</span><p>One server. Under one roof.</p></div></main>`;
   el('login-error').textContent = error || messages[code] || '';
   el<HTMLAnchorElement>('discord-login').href = api('/auth/login');
+  if (inActivity) {
+    const link = el<HTMLAnchorElement>('discord-login');
+    link.href = '#'; link.textContent = 'Join office in Discord';
+    link.onclick = event => { event.preventDefault(); const params = new URLSearchParams(location.search); params.delete('logged_out'); history.replaceState(null, '', `${location.pathname}?${params}`); void boot(); };
+  }
   if (code === 'rate_limited') el('login-error').textContent = 'Discord temporarily limited sign-in requests. You can try signing in again.';
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
     const link = el<HTMLAnchorElement>('discord-login'), message = el('login-error');
@@ -54,6 +66,7 @@ function office(user: Identity, mock: boolean) {
   <aside aria-label="Office room roster"><div class="roster-heading"><h2>In the office</h2><span id="total">0</span></div><p class="roster-subtitle" id="roster-subtitle">Finding your people…</p><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a teammate" aria-label="Find a teammate"></label><button class="all-rooms" id="all-rooms">All rooms <span>↗</span></button><div id="roster"></div><div class="privacy-note"><span>◈</span><div><strong id="privacy-title">Only here while you are.</strong><p id="privacy-description">Only connected players appear. Room chat is transient. Log out to leave.</p><button id="bubbles" class="text-button" aria-pressed="true">Speech bubbles on</button></div></div></aside></div>
   <dialog id="help-dialog"><button id="close-help" class="icon-button" aria-label="Close help">×</button><h2>Make yourself at home.</h2><p>Walk with WASD, arrow keys, or a floor click. New Discord chat/voice activity sets a room destination; manual movement takes over whenever you choose. Moving manually cancels a pending two-minute return to Commons. Ten quiet minutes sends you to Nap Room.</p><p>General voice belongs to Commons. Other calls under CALL FOR VOICE belong to Meeting Room. A green ring and animated bars mean the member is speaking in a monitored Discord call; a voice label alone means connected, not speaking. The bot monitors one occupied voice channel at a time. No call audio is recorded, decoded or played in the map.</p><p>Drag to pan, scroll or use +/− to zoom. Fit to view resets the camera. Click a name to follow them, or use Find me. Message previews are transient. Logging out ends your viewer session, not your Discord character.</p><p>${mock ? 'This is a demo with fictional players and simulated speaking indicators. No real Discord audio is read.' : 'You signed in with Discord. Server membership is checked during login.'}</p></dialog>`;
   const scene = new OfficeScene();
+  if (inActivity) document.querySelector<HTMLAnchorElement>('.topbar .brand')!.onclick = event => { event.preventDefault(); location.reload(); };
   new Phaser.Game({ type: Phaser.AUTO, parent: 'map', backgroundColor: '#09070f', scene, scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' }, render: { antialias: true }, audio: { noAudio: true } });
   let snapshot: Snapshot | undefined, selected: Room | undefined, query = '', selfId = user.id;
   let localBubbles = localStorage.getItem('office-bubbles') !== 'off';
@@ -107,7 +120,7 @@ function office(user: Identity, mock: boolean) {
   el('help').onclick = () => el<HTMLDialogElement>('help-dialog').showModal(); el('close-help').onclick = () => el<HTMLDialogElement>('help-dialog').close();
   el('logout').onclick = async () => {
     const button = el<HTMLButtonElement>('logout'); button.disabled = true;
-    try { const response = await fetch(api('/auth/logout'), { method: 'POST', credentials: 'include' }); if (!response.ok) throw new Error('Logout failed'); stopped = true; keys.clear(); socket?.close(); location.href = '/?logged_out=1'; }
+    try { const response = await fetch(api('/auth/logout'), { method: 'POST', credentials: 'include' }); if (!response.ok) throw new Error('Logout failed'); stopped = true; keys.clear(); socket?.close(); const next = new URL(location.href); next.searchParams.set('logged_out', '1'); location.href = next.href; }
     catch { button.disabled = false; el('map-notice').hidden = false; el('map-notice').textContent = 'Could not end your session. Check the connection and try Log out again.'; }
   };
   document.querySelectorAll<HTMLButtonElement>('.emote').forEach(button => { button.onclick = () => send({ type: 'emote', index: Number(button.dataset.index) }); });
@@ -142,7 +155,7 @@ function office(user: Identity, mock: boolean) {
   function connect() {
     if (stopped) return;
     const relative = new URL(api('/ws'), location.href); relative.protocol = relative.protocol === 'https:' ? 'wss:' : 'ws:';
-    const configured = import.meta.env.VITE_WS_URL;
+    const configured = inActivity ? undefined : import.meta.env.VITE_WS_URL;
     const wsUrl = configured ? new URL(configured, relative) : relative;
     if (wsUrl.protocol === 'http:') wsUrl.protocol = 'ws:'; if (wsUrl.protocol === 'https:') wsUrl.protocol = 'wss:';
     socket = new WebSocket(wsUrl);
@@ -151,7 +164,9 @@ function office(user: Identity, mock: boolean) {
       let packet: Packet; try { packet = JSON.parse(event.data); } catch { return; }
       if (packet.type === 'bubble') { if (localBubbles && snapshot?.members.find(m => m.id === selfId)?.room === packet.room) scene.speak(packet.memberId, packet.text, packet.duration); return; }
       if (packet.type === 'error') return;
-      snapshot = packet.state; if (packet.type === 'snapshot') { selfId = packet.selfId; scene.setSelf(selfId); }
+      snapshot = packet.state;
+      if (inActivity) snapshot.members = snapshot.members.map(member => ({ ...member, avatar: activityAvatar(member.avatar) }));
+      if (packet.type === 'snapshot') { selfId = packet.selfId; scene.setSelf(selfId); }
       scene.sync(snapshot); renderRoster(); bubbleControl();
       const automatic = discordControlled(), linked = snapshot.discord?.state === 'connected';
       el('mode').textContent = mock ? 'Demo office' : linked ? 'Discord live' : 'Live office';

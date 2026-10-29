@@ -8,7 +8,7 @@ import type { AuthOptions } from './auth.js';
 import type { Packet } from './protocol.js';
 const options: AuthOptions = { clientId: 'test-client', clientSecret: 'server-only-secret', redirectUri: 'http://localhost:5173/auth/callback', guildId: 'server-1', secret: 'test-session-secret-with-more-than-32-characters', webUrl: 'http://localhost:5173', mock: false };
 const cookie = (response: Response, name: string) => response.headers.getSetCookie().find(v => v.startsWith(`${name}=`))!.split(';')[0];
-async function fixture(nonMember = false, failExchange = false, rateLimit?: { stage: 'token_exchange' | 'profile' | 'guild_list'; response: () => Response | Promise<Response> }) {
+async function fixture(nonMember = false, failExchange = false, rateLimit?: { stage: 'token_exchange' | 'profile' | 'guild_list'; response: () => Response | Promise<Response> }, activity = false) {
   const requests: { url: string; init?: RequestInit }[] = [];
   let limited = !!rateLimit;
   const provider = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -17,7 +17,9 @@ async function fixture(nonMember = false, failExchange = false, rateLimit?: { st
     if (limited && stage === rateLimit?.stage) { limited = false; return rateLimit.response(); }
     if (path.endsWith('/oauth2/token')) {
       if (failExchange) return new Response('{}', { status: 400 });
-      const body = init!.body as URLSearchParams; assert.equal(body.get('client_secret'), options.clientSecret); assert.ok(body.get('code_verifier'));
+      const body = init!.body as URLSearchParams; assert.equal(body.get('client_secret'), options.clientSecret);
+      if (activity) { assert.equal(body.has('code_verifier'), false); assert.equal(body.has('redirect_uri'), false); }
+      else assert.ok(body.get('code_verifier'));
       return Response.json({ access_token: body.get('code') ?? '123', scope: 'identify guilds' });
     }
     const id = (init?.headers as Record<string, string>)?.Authorization.replace('Bearer ', '') ?? '123';
@@ -48,6 +50,68 @@ function packet(ws: WebSocket, match: (p: Packet) => boolean): Promise<Packet> {
     ws.on('message', listener);
   });
 }
+
+const activityOrigin = `https://${options.clientId}.discordsays.com`;
+const activityHeaders = { Origin: activityOrigin, 'Content-Type': 'application/json' };
+test('Activity exchanges SDK code, verifies membership and uses a partitioned session for HTTP, WebSocket and logout', async () => {
+  const f = await fixture(false, false, undefined, true);
+  try {
+    const config = await (await fetch(`${f.base}/api/activity/config`)).json();
+    assert.equal(config.clientId, options.clientId); assert.ok(!JSON.stringify(config).includes(options.clientSecret));
+    const response = await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: activityHeaders, body: JSON.stringify({ code: '123' }) });
+    assert.equal(response.status, 200);
+    const data = await response.json(); assert.equal(data.user.id, '123'); assert.equal(data.access_token, '123');
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const header = response.headers.getSetCookie()[0];
+    for (const value of ['HttpOnly', 'SameSite=None', 'Secure', 'Partitioned', `Domain=${options.clientId}.discordsays.com`]) assert.ok(header.includes(value));
+    const session = cookie(response, 'office_activity_session');
+    // Proxy may rewrite Host and same-origin GET requests may omit Origin.
+    const current = await (await fetch(`${f.base}/api/session`, { headers: { Cookie: session } })).json();
+    assert.equal(current.user.id, '123'); assert.equal(current.access_token, undefined);
+    const ws = new WebSocket(`${f.base.replace('http:', 'ws:')}/ws`, { headers: { Cookie: session, Origin: activityOrigin } });
+    const snapshot = packet(ws, p => p.type === 'snapshot'); await once(ws, 'open'); await snapshot;
+    const closed = once(ws, 'close');
+    const logout = await fetch(`${f.base}/auth/logout`, { method: 'POST', headers: { Cookie: session, Origin: activityOrigin } });
+    assert.equal(logout.status, 200); assert.match(logout.headers.getSetCookie()[0], /office_activity_session=;.*Max-Age=0/);
+    await closed;
+    const after = await (await fetch(`${f.base}/api/session`, { headers: { Cookie: session } })).json(); assert.equal(after.user, null);
+  } finally { await f.app.close(); }
+});
+
+test('Activity rejects missing/foreign origins, invalid bodies and non-members without creating a session', async () => {
+  const f = await fixture(true, false, undefined, true);
+  try {
+    for (const origin of ['', 'https://evil.example', 'https://other.discordsays.com']) {
+      const response = await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: { ...activityHeaders, Origin: origin }, body: JSON.stringify({ code: '123' }) });
+      assert.equal(response.status, 403);
+    }
+    assert.equal(f.requests.length, 0);
+    for (const body of ['{', '{}', '{"code":42}', 'null']) {
+      const response = await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: activityHeaders, body }); assert.equal(response.status, 400);
+    }
+    assert.equal(f.requests.length, 0);
+    const response = await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: activityHeaders, body: JSON.stringify({ code: '123' }) });
+    assert.equal(response.status, 403); assert.deepEqual(await response.json(), { error: 'not_member' }); assert.equal(response.headers.getSetCookie().length, 0);
+  } finally { await f.app.close(); }
+});
+
+test('Activity provider failures fail closed and rate limits also block browser sign-in', async () => {
+  for (const limited of [false, true]) {
+    const f = await fixture(false, !limited, limited ? { stage: 'token_exchange', response: () => new Response('{}', { status: 429, headers: { 'Retry-After': '60' } }) } : undefined, true);
+    try {
+      const response = await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: activityHeaders, body: JSON.stringify({ code: '123' }) });
+      assert.equal(response.status, limited ? 429 : 502); assert.equal(response.headers.getSetCookie().length, 0);
+      const data = await response.json(); assert.equal(data.error, limited ? 'rate_limited' : 'failed');
+      if (limited) {
+        assert.ok(data.retryAfterSeconds > 0);
+        const count = f.requests.length;
+        await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: activityHeaders, body: JSON.stringify({ code: '456' }) });
+        const browser = await fetch(`${f.base}/auth/login`, { redirect: 'manual' }); assert.match(browser.headers.get('location')!, /rate_limited/);
+        assert.equal(f.requests.length, count);
+      }
+    } finally { await f.app.close(); }
+  }
+});
 test('OAuth authorization, server exchange, membership verification and signed session work together', async () => {
   const f = await fixture();
   try {

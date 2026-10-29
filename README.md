@@ -232,7 +232,31 @@ VITE_WS_URL=/ws
 
 A full ws(s) URL is also accepted. Prefer same-origin proxying: cookies remain on one host and no CORS configuration is required. A cross-site API deployment needs additional cookie/CORS design and is not the default supported setup.
 
-To convert to a Discord Activity later, retain the Phaser scene and simulation. Add `@discord/embedded-app-sdk` in the web client, wait for SDK readiness, obtain a Discord authorization code through the SDK, and exchange it on the server. Add a server endpoint for that entry point and retain membership/session validation. Configure Activity URL mappings for the app and `/api`, `/auth`, `/ws` routes; use mapped relative URLs. Embedded iframe cookie policies may require an Activity-specific session transport. Do not put client secrets in the SDK client or assume this standalone browser login can run unchanged inside an iframe. See [Building an Activity](https://github.com/discord/discord-api-docs/blob/main/developers/activities/building-an-activity.mdx) and [local development / URL mappings](https://github.com/discord/discord-api-docs/blob/main/developers/activities/development-guides/local-development.mdx).
+## Launch inside Discord as an Activity
+
+The office detects a Discord Activity launch and signs in through the official Embedded App SDK inside Discord. The server exchanges the SDK code and checks the profile and configured server membership before creating an office session. Normal browser and mock mode remain available for local debugging.
+
+1. Deploy this updated code to your Render service. In Render Environment use the same current `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_TOKEN` and `GUILD_ID` that work locally. Local `.env` changes are not copied to Render. Keep the production `WEB_URL` and `DISCORD_REDIRECT_URI` values from `render.yaml`.
+2. Open your application in [Discord Developer Portal](https://discord.com/developers/applications). Under **Activities → Settings**, turn on **Enable Activities**. Discord automatically creates the default **Launch** Entry Point command; keep its default Discord handler.
+3. Under **Activities → URL Mappings**, add these mappings (targets are hostnames, without `https://`):
+
+   | Prefix | Target |
+   | --- | --- |
+   | `/` | `bot-office-nwl0.onrender.com` |
+   | `/discord-cdn` | `cdn.discordapp.com` |
+
+   The root mapping serves the page, `/api`, `/auth` and `/ws` from the same backend. The second mapping serves Discord avatars through the sandbox proxy. Use your actual Render hostname if different.
+4. Keep the browser callback URL under **OAuth2 → Redirects**. Activity code exchange uses the SDK flow and does not send the standalone browser redirect URI or PKCE verifier.
+5. Under **Installation**, enable **Guild Install** and include `applications.commands` along with `bot` in the installation scopes. Install the app in your configured server. Keep the bot intents and permissions described above enabled.
+6. Enable **Discord User Settings → Advanced → Developer Mode**. From your server's App Launcher / **Start an Activity**, find your application and choose **Launch**. During development, launch access is limited to the application owner/developer team. Wider availability requires Discord's distribution setup.
+
+No extra `VITE_` client ID is required: `/api/activity/config` supplies only the public application ID and login cooldown. Activity API and WebSocket URLs always use the Discord proxy origin, even if browser-specific `VITE_API_BASE_URL` or `VITE_WS_URL` overrides exist.
+
+Activity sessions use a separate signed HttpOnly cookie with `SameSite=None; Secure; Partitioned` and the application's exact `clientId.discordsays.com` domain. Only that application's proxy origin can submit Activity token exchanges. Server membership is checked with Discord's API, not client-supplied user or guild IDs. Logout clears the partitioned session and retains the SDK launch parameters.
+
+Unlike standalone browser login, Activity login briefly sends the OAuth access token to the SDK's `authenticate` command in browser memory. It is never put in localStorage, URLs, logs or office snapshots. Client secrets and bot tokens stay on the server. Activity and browser login share the same provider cooldown; switching to Activity does not bypass a Discord rate limit.
+
+For local Activity development, map `/` to an HTTPS tunnel serving the built app on port 3001, or Vite on port 5174. Vite's `allowedHosts` must include your current tunnel hostname (without `https://`). Keep the tunnel running. See [Discord's Activity setup guide](https://docs.discord.com/developers/activities/building-an-activity) and [proxy/cookie requirements](https://docs.discord.com/developers/activities/development-guides/networking).
 
 ## Project and checks
 
