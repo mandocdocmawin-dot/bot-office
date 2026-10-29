@@ -38,8 +38,12 @@ export function parsePacket(raw: string): ClientPacket | undefined {
         ) {
             return { type: 'move_to', x: p.x, y: p.y }
         }
-        if (p.type === 'chat' && typeof p.text === 'string' && [...p.text].length <= 80) {
-            return { type: 'chat', text: p.text }
+        if (p.type === 'chat' && typeof p.text === 'string') {
+            // Match the room chat UI: links can be longer than text previews.
+            const limit = /^https?:\/\/\S+$/i.test(p.text.trim()) ? 500 : 80
+            if ([...p.text].length <= limit) {
+                return { type: 'chat', text: p.text }
+            }
         }
         if (p.type === 'emote' && Number.isInteger(p.index) && p.index >= 0 && p.index < 5) {
             return { type: 'emote', index: p.index }
@@ -181,7 +185,7 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
             ws.on('pong', () => {
                 alive = true
             })
-            ws.on('error', () => {})
+            ws.on('error', () => console.warn('[office] websocket_error'))
             ws.on('message', (data, binary) => {
                 if (connections.get(user.id) !== ws) {
                     return
@@ -196,12 +200,22 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                 }
                 const packet = parsePacket(data.toString())
                 if (!packet) {
+                    // An oversized chat is recoverable input, not a reason to
+                    // disconnect someone from the office and their controls.
+                    try {
+                        const rejected = JSON.parse(data.toString())
+                        if (rejected?.type === 'chat' && typeof rejected.text === 'string') {
+                            send(ws, { type: 'error', message: 'Message too long. Use up to 80 characters for text or 500 for a single link.' })
+                            return
+                        }
+                    } catch { /* Invalid non-chat packets retain the protocol close below. */ }
                     ws.close(1008, 'Invalid input')
                     return
                 }
                 office.input(user.id, packet)
             })
-            ws.on('close', () => {
+            ws.on('close', (code) => {
+                if (code !== 1000 && code !== 1005) console.warn('[office] websocket_closed', { code })
                 clearInterval(heartbeat)
                 if (connections.get(user.id) !== ws) {
                     return

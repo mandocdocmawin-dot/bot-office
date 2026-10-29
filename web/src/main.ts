@@ -331,7 +331,7 @@ function office(user: Identity, mock: boolean) {
     }
     el<HTMLInputElement>('chat-input').oninput = () => {
         const input = el<HTMLInputElement>('chat-input')
-        const isUrl = input.value.startsWith('http://') || input.value.startsWith('https://')
+        const isUrl = input.value.trim().startsWith('http://') || input.value.trim().startsWith('https://')
         const max = isUrl ? 500 : 80
         input.value = [...input.value].slice(0, max).join('')
         el('chat-count').textContent = isUrl ? 'GIF / Link' : `${[...input.value].length}/80`
@@ -500,6 +500,12 @@ function office(user: Identity, mock: boolean) {
                 return
             }
             if (packet.type === 'error') {
+                const notice = el('map-notice')
+                notice.textContent = packet.message
+                notice.hidden = false
+                setTimeout(() => {
+                    if (socket.readyState === WebSocket.OPEN && notice.textContent === packet.message) notice.hidden = true
+                }, 5000)
                 return
             }
             serverSnapshot = packet.state
@@ -562,6 +568,7 @@ function office(user: Identity, mock: boolean) {
                 : 'Live · 20 updates / second'
         }
         socket.onclose = (event) => {
+            console.warn('[office] websocket_closed', { code: event.code, clean: event.wasClean, activity: inActivity })
             activitySpeaking.clear()
             serverSnapshot = undefined
             if (snapshot) {
@@ -604,7 +611,10 @@ function office(user: Identity, mock: boolean) {
                 )
             }
         }
-        socket.onerror = () => socket.close()
+        socket.onerror = () => {
+            console.warn('[office] websocket_error')
+            socket.close()
+        }
     }
     bubbleControl()
     connect()

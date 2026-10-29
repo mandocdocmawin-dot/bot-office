@@ -31,6 +31,10 @@ Deploy via `render.yaml`:
     - `DISCORD_REDIRECT_URI=https://your-app.onrender.com/auth/callback`
 3. Check `/health` endpoint: verify `discord.state == "connected"`.
 
+## GIFs and Connection Diagnostics
+
+For GIF-related disconnects, the server reports `[office] websocket_error` and unexpected `[office] websocket_closed` codes. The browser console reports its close code and whether it was clean, plus `[office] media_load_failed` when an image fails. These diagnostics exclude chat text, media URLs, and member identities. Room chat accepts a single HTTP(S) link up to 500 characters and ordinary text up to 80; oversized chat returns an error without closing the connection.
+
 ## Discord 429 Rate Limits
 
 - Server serializes OAuth requests and enforces provider `retry_after`.

@@ -630,8 +630,10 @@ export class OfficeScene extends Phaser.Scene {
         }
         img.onerror = () => {
             if (c.bubble === dom) {
+                console.warn('[office] media_load_failed')
                 dom.destroy()
                 c.bubble = undefined
+                this.createTextBubble(c, 'GIF unavailable', duration)
             }
         }
 

@@ -659,3 +659,52 @@ test('chat broadcasts only to room occupants, snapshots omit text, and flooding 
         await f.app.close()
     }
 })
+
+test('long GIF links render as bubbles without closing the socket; oversized chat errors are recoverable', async () => {
+    const f = await fixture()
+    try {
+        const { ws } = await f.socket((await f.login()).cookie)
+        const text = 'https://media.giphy.com/media/NVBR6cLvUjV9C/giphy.gif?test=' + 'a'.repeat(120)
+        const bubble = packet(ws, (p) => p.type === 'bubble')
+        ws.send(JSON.stringify({ type: 'chat', text }))
+        const received = await bubble
+        assert.equal(received.type, 'bubble')
+        if (received.type === 'bubble') assert.equal(received.text, text)
+        assert.equal(ws.readyState, WebSocket.OPEN)
+
+        const error = packet(ws, (p) => p.type === 'error')
+        ws.send(JSON.stringify({ type: 'chat', text: 'x'.repeat(81) }))
+        assert.equal((await error).type, 'error')
+        await packet(ws, (p) => p.type === 'state')
+        assert.equal(ws.readyState, WebSocket.OPEN)
+        assert.ok(!JSON.stringify(f.app.office.snapshot()).includes(text))
+        ws.close()
+    } finally {
+        await f.app.close()
+    }
+})
+
+test('the reported Giphy page resolves to an image while the socket keeps receiving updates', async () => {
+    const f = await fixture()
+    const originalFetch = globalThis.fetch
+    const page = 'https://giphy.com/gifs/link-the-legend-of-zelda-NVBR6cLvUjV9C'
+    const image = 'https://media4.giphy.com/media/NVBR6cLvUjV9C/giphy.gif'
+    const provider = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+        if (String(input) === page) return Promise.resolve(new Response(`<img src="${image}">`))
+        return originalFetch(input, init)
+    })
+    try {
+        const { ws } = await f.socket((await f.login()).cookie)
+        const bubble = packet(ws, (p) => p.type === 'bubble')
+        ws.send(JSON.stringify({ type: 'chat', text: page }))
+        const received = await bubble
+        assert.equal(received.type, 'bubble')
+        if (received.type === 'bubble') assert.equal(received.text, image)
+        await packet(ws, (p) => p.type === 'state')
+        assert.equal(ws.readyState, WebSocket.OPEN)
+        ws.close()
+    } finally {
+        provider.mockRestore()
+        await f.app.close()
+    }
+})

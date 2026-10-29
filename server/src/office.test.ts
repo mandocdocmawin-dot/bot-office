@@ -123,3 +123,14 @@ test('configuration validates geometry and simulation bounds', () => {
     assert.throws(() => validateConfig({ ...config, rooms: [] }))
     assert.throws(() => validateConfig({ ...config, player_speed: -1 }))
 })
+
+test('chat validation accepts links through 500 characters while keeping ordinary text capped', () => {
+    for (const length of [80, 81, 168, 500]) {
+        const prefix = 'https://media.giphy.com/media/'
+        const text = prefix + 'a'.repeat(length - prefix.length - 4) + '.gif'
+        assert.deepEqual(parsePacket(JSON.stringify({ type: 'chat', text })), { type: 'chat', text })
+    }
+    assert.equal(parsePacket(JSON.stringify({ type: 'chat', text: 'https://example.com/' + 'a'.repeat(500) })), undefined)
+    assert.equal(parsePacket(JSON.stringify({ type: 'chat', text: 'x'.repeat(81) })), undefined)
+    assert.equal(parsePacket(JSON.stringify({ type: 'chat', text: 'https://example.com/ ' + 'a'.repeat(81) })), undefined)
+})

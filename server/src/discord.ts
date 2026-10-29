@@ -155,7 +155,9 @@ export function startDiscord(
         )
     })
     client.on(Events.MessageUpdate, (oldMessage, newMessage) => {
-        if (newMessage.guildId !== guildId || newMessage.author?.bot) {
+        // Embed updates can be partial and lack an author. Do not dereference
+        // author.id in those events: an uncaught error would restart the bot.
+        if (newMessage.guildId !== guildId || !newMessage.author || newMessage.author.bot) {
             return
         }
         const oldContent = extractMediaContent(oldMessage as any)
@@ -166,7 +168,7 @@ export function startDiscord(
             }
             const parent = newMessage.channel.isThread() ? newMessage.channel.parent : null
             office.discordMessage(
-                newMessage.author!.id,
+                newMessage.author.id,
                 textRoom(
                     office.config,
                     { id: newMessage.channelId, name: 'name' in newMessage.channel ? newMessage.channel.name : '' },
