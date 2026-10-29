@@ -4,32 +4,10 @@ import type { Office } from './office.js'
 import { channelKey, textRoom, voiceRoom } from './discord-routing.js'
 import type { Member } from './protocol.js'
 import { SpeakingIndicator } from './voice.js'
+import { extractMediaContent } from './discord-message.js'
 
 const presence = (status?: string): NonNullable<Member['presence']> =>
     status === 'online' || status === 'idle' || status === 'dnd' ? status : 'offline'
-function extractMediaContent(message: {
-    content?: string | null
-    attachments?: { first?: () => { url: string } | undefined }
-    embeds?: Array<{
-        image?: { url?: string | null } | null
-        thumbnail?: { url?: string | null } | null
-        video?: { url?: string | null } | null
-        url?: string | null
-    }>
-}): string | undefined {
-    if (message.content && message.content.trim()) {
-        return message.content
-    }
-    const attachmentUrl = message.attachments?.first?.()?.url
-    if (attachmentUrl) {
-        return attachmentUrl
-    }
-    const embed = message.embeds?.[0]
-    if (embed) {
-        return embed.image?.url || embed.thumbnail?.url || embed.video?.url || embed.url || undefined
-    }
-    return undefined
-}
 
 export function startDiscord(
     office: Office,
@@ -160,8 +138,8 @@ export function startDiscord(
         if (newMessage.guildId !== guildId || !newMessage.author || newMessage.author.bot) {
             return
         }
-        const oldContent = extractMediaContent(oldMessage as any)
-        const newContent = extractMediaContent(newMessage as any)
+        const oldContent = extractMediaContent(oldMessage)
+        const newContent = extractMediaContent(newMessage)
         if (newContent && newContent !== oldContent && (!oldContent || !oldContent.startsWith('http'))) {
             if (newMessage.member) {
                 upsert(newMessage.member)
