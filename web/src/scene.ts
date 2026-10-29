@@ -586,16 +586,16 @@ export class OfficeScene extends Phaser.Scene {
 
         const box = document.createElement('div')
         box.style.cssText =
-            'background:#eee8fa;padding:4px;border-radius:8px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'
+            'background:#eee8fa;padding:3px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'
 
         const img = document.createElement('img')
         img.alt = 'Chat media'
         img.style.cssText =
-            'max-width:140px;max-height:120px;min-width:32px;min-height:32px;border-radius:6px;display:block;object-fit:contain;'
+            'max-width:76px;max-height:68px;min-width:28px;min-height:28px;border-radius:4px;display:block;object-fit:contain;'
 
         const arrow = document.createElement('div')
         arrow.style.cssText =
-            'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid #eee8fa;margin-top:-1px;'
+            'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #eee8fa;margin-top:-1px;'
 
         box.append(img)
         wrap.append(box)
