@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto'
 import { resolve } from 'node:path'
 import dotenv from 'dotenv'
 import { ROOT, loadConfig } from './config.js'
@@ -30,9 +29,10 @@ const app = createOfficeServer(loadConfig(), {
     clientSecret: process.env.DISCORD_CLIENT_SECRET ?? '',
     redirectUri: process.env.DISCORD_REDIRECT_URI ?? '',
     guildId: process.env.GUILD_ID ?? '',
-    secret: mock ? randomBytes(32).toString('hex') : process.env.SESSION_SECRET!,
+    secret: process.env.SESSION_SECRET ?? (mock ? 'mock-secret-discord-office-dev-environment-key-stable' : ''),
     webUrl,
-    mock
+    mock,
+    sessionFilePath: resolve(ROOT, 'server/data/sessions.json')
 })
 let stopDiscord: (() => void) | undefined
 const shutdown = () => {

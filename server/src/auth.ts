@@ -1,5 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { dirname } from 'node:path'
 import type { Identity } from './protocol.js'
 import { OAuthRateLimitError, readOAuthCooldown } from './oauth-rate-limit.js'
 
@@ -11,6 +13,7 @@ export interface AuthOptions {
     secret: string
     webUrl: string
     mock: boolean
+    sessionFilePath?: string
 }
 interface ActivityAuth {
     accessToken: string
@@ -37,7 +40,45 @@ export class Auth {
         private request: typeof fetch = fetch,
         private now = () => Date.now(),
         public onInvalidate: (id: string) => void = () => {}
-    ) {}
+    ) {
+        if (options.sessionFilePath) {
+            this.loadSessions()
+        }
+    }
+    private loadSessions() {
+        if (!this.options.sessionFilePath) {
+            return
+        }
+        try {
+            if (existsSync(this.options.sessionFilePath)) {
+                const raw = readFileSync(this.options.sessionFilePath, 'utf8')
+                const parsed = JSON.parse(raw) as [string, Session][]
+                const now = this.now()
+                for (const [id, session] of parsed) {
+                    if (session.expires > now) {
+                        this.sessions.set(id, session)
+                    }
+                }
+            }
+        } catch {
+            /* Corrupted or unreadable session file: ignore cleanly */
+        }
+    }
+    private saveSessions() {
+        if (!this.options.sessionFilePath) {
+            return
+        }
+        try {
+            const dir = dirname(this.options.sessionFilePath)
+            if (!existsSync(dir)) {
+                mkdirSync(dir, { recursive: true })
+            }
+            const active = [...this.sessions.entries()].filter(([, s]) => s.expires > this.now())
+            writeFileSync(this.options.sessionFilePath, JSON.stringify(active), 'utf8')
+        } catch {
+            /* Persistence error is non-fatal: sessions remain in memory */
+        }
+    }
     allowedOrigin(origin?: string) {
         if (origin === this.activityOrigin()) {
             return true
@@ -119,22 +160,27 @@ export class Auth {
             throw new Error('Office session capacity reached')
         }
         const id = randomBytes(32).toString('base64url')
+        const maxAgeSeconds = 30 * 24 * 60 * 60
         this.sessions.set(id, {
             user,
-            expires: this.now() + 8 * 60 * 60 * 1000,
+            expires: this.now() + maxAgeSeconds * 1000,
             ...(activity && activityAuth ? { activityAuth } : {})
         })
-        this.setCookie(res, activity ? 'office_activity_session' : this.cookieName, this.pack(id), 8 * 60 * 60)
+        this.setCookie(res, activity ? 'office_activity_session' : this.cookieName, this.pack(id), maxAgeSeconds)
+        this.saveSessions()
     }
     sweep() {
+        let changed = false
         for (const [id, s] of this.sessions) {
             if (s.expires <= this.now()) {
                 this.sessions.delete(id)
+                changed = true
             }
         }
         for (const s of this.sessions.values()) {
             if (s.activityAuth && s.activityAuth.expires <= this.now()) {
                 delete s.activityAuth
+                changed = true
             }
         }
         for (const [id, f] of this.flows) {
@@ -142,14 +188,22 @@ export class Auth {
                 this.flows.delete(id)
             }
         }
+        if (changed) {
+            this.saveSessions()
+        }
     }
     revokeUser(userId: string) {
+        let changed = false
         for (const [id, session] of this.sessions) {
             if (session.user.id === userId) {
                 this.sessions.delete(id)
+                changed = true
             }
         }
         this.onInvalidate(userId)
+        if (changed) {
+            this.saveSessions()
+        }
     }
     private redirect(res: ServerResponse, url: string) {
         res.writeHead(302, {
@@ -258,6 +312,7 @@ export class Auth {
             const user = this.session(req)
             if (id) {
                 this.sessions.delete(id)
+                this.saveSessions()
             }
             if (user) {
                 this.onInvalidate(user.id)

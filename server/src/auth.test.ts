@@ -1,9 +1,14 @@
 import { test, vi } from 'vite-plus/test'
 import assert from 'node:assert/strict'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { once } from 'node:events'
 import { WebSocket } from 'ws'
 import { createOfficeServer } from './app.js'
 import { loadConfig } from './config.js'
+import { Auth } from './auth.js'
 import type { AuthOptions } from './auth.js'
 import type { Packet } from './protocol.js'
 
@@ -791,5 +796,33 @@ test('viewers of one GIF share a single in-flight provider download', async () =
         release()
         provider.mockRestore()
         await f.app.close()
+    }
+})
+
+test('sessions persist to sessionFilePath and can be reloaded across instances', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'auth-test-'))
+    const sessionFilePath = join(tmpDir, 'sessions.json')
+    try {
+        const auth1 = new Auth({ ...options, sessionFilePath })
+        let cookieHeader = ''
+        const res1 = {
+            getHeader: () => {},
+            setHeader: (_name: string, value: string | string[]) => {
+                cookieHeader = Array.isArray(value) ? value[0] : value
+            }
+        } as unknown as ServerResponse
+        auth1.createSession({ id: 'u1', username: 'Test', avatar: '/0.svg' }, res1)
+
+        assert.ok(existsSync(sessionFilePath))
+        const rawCookie = cookieHeader.split(';')[0]
+        const auth2 = new Auth({ ...options, sessionFilePath })
+        const req = {
+            headers: {
+                cookie: rawCookie
+            }
+        } as unknown as IncomingMessage
+        assert.equal(auth2.session(req)?.id, 'u1')
+    } finally {
+        rmSync(tmpDir, { recursive: true, force: true })
     }
 })
