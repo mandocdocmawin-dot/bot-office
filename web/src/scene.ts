@@ -26,6 +26,8 @@ interface Character {
     depth: number
 }
 export class OfficeScene extends Phaser.Scene {
+    // Safe to assign before Phaser has booted and injected scene.events.
+    onFrame: () => void = () => {}
     private people = new Map<string, Character>()
     private counts = new Map<Room, Phaser.GameObjects.Text>()
     private pending?: Snapshot
@@ -256,6 +258,7 @@ export class OfficeScene extends Phaser.Scene {
         }
     }
     update(time: number, delta: number) {
+        this.onFrame()
         const now = performance.now()
         const realDelta = this.lastUpdate > 0 ? Math.min(now - this.lastUpdate, 250) : delta
         this.lastUpdate = now

@@ -530,7 +530,7 @@ function office(user: Identity, mock: boolean) {
         }
     }
     setInterval(triggerHeartbeat, 70)
-    scene.events.on('update', triggerHeartbeat)
+    scene.onFrame = triggerHeartbeat
     function connect() {
         if (stopped) {
             return
