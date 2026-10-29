@@ -1,25 +1,25 @@
 {
-  "name": "@office/server",
-  "private": true,
-  "version": "2.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "node --watch --import tsx src/index.ts",
-    "mock": "node --watch --import tsx src/index.ts --mock",
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "start": "node dist/index.js",
-    "test": "tsx --test src/*.test.ts"
-  },
-  "dependencies": {
-    "@discordjs/voice": "^0.19.2",
-    "discord.js": "^14.27.0",
-    "dotenv": "^17.2.0",
-    "ws": "^8.18.3"
-  },
-  "devDependencies": {
-    "@types/node": "^22.18.0",
-    "@types/ws": "^8.18.1",
-    "tsx": "^4.20.0"
-  }
+    "name": "@office/server",
+    "version": "2.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vpx --watch src/index.ts",
+        "mock": "vpx --watch src/index.ts --mock",
+        "build": "tsc",
+        "typecheck": "tsc --noEmit",
+        "start": "node dist/index.js",
+        "test": "vp test"
+    },
+    "dependencies": {
+        "@discordjs/voice": "^0.19.2",
+        "@office/shared": "*",
+        "discord.js": "^14.27.0",
+        "dotenv": "^17.2.0",
+        "ws": "^8.18.3"
+    },
+    "devDependencies": {
+        "@types/node": "^22.18.0",
+        "@types/ws": "^8.18.1"
+    }
 }

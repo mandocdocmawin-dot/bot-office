@@ -44,7 +44,6 @@ The test suite validates OAuth callbacks with an injected provider, non-member r
 
 Real Discord consent is a separate live check: it needs valid application credentials, a matching Developer Portal redirect and an account in the configured guild. No such credentials are bundled or faked as a real Discord login.
 
-
 ## Subsequent revision: automatic Discord activity and zoom repair
 
 Added `server/src/discord.ts`, `server/src/discord-routing.ts`, and `server/src/discord.test.ts` to restore live message, forum, voice, member and presence updates. Existing OAuth login still restricts viewers to the configured guild. Tracked members remain when viewers disconnect, ignore browser movement, and follow Discord activity and idle timers instead. Message snippets are capped at 40 characters and remain transient. The bot never posts into Discord.
@@ -52,7 +51,6 @@ Added `server/src/discord.ts`, `server/src/discord-routing.ts`, and `server/src/
 Updated `server/src/office.ts`, `protocol.ts`, `config.ts`, `auth.ts`, `app.ts`, `index.ts`, `config.json`, the server package/lockfile, `.env.example`, and README. Restored `discord.js` as a server dependency and added private `DISCORD_TOKEN` configuration. Token validity and guild membership are checked separately; missing invitation or intents are shown in the office status banner.
 
 Updated `web/src/main.ts` and `style.css` for live Discord status, automatic-control hints, offline dimming, and accurate privacy wording. Updated `web/src/scene.ts` to preserve zoom on resize/Expand, capture wheel/trackpad scrolling over the canvas without scrolling the page, zoom toward the pointer, and support 50–600% magnification. Fit to view is the explicit reset. Browser checks verified +/−, wheel input and zoom preservation across Expand. Server checks cover six additional Discord activity scenarios (19 total tests).
-
 
 ## Hybrid controls, speaking indicators and articulated walking
 

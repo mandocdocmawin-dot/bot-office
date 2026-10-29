@@ -1,31 +1,31 @@
 services:
-  - type: web
-    name: discord-office
-    runtime: docker
-    plan: 0.5c-512mb
-    region: singapore
-    numInstances: 1
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    healthCheckPath: /health
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: HOST
-        value: 0.0.0.0
-      - key: PORT
-        value: "10000"
-      - key: SESSION_SECRET
-        generateValue: true
-      - key: DISCORD_CLIENT_ID
-        sync: false
-      - key: DISCORD_CLIENT_SECRET
-        sync: false
-      - key: DISCORD_TOKEN
-        sync: false
-      - key: GUILD_ID
-        sync: false
-      - key: WEB_URL
-        value: https://bot-office-nwl0.onrender.com
-      - key: DISCORD_REDIRECT_URI
-        value: https://bot-office-nwl0.onrender.com/auth/callback
+    - type: web
+      name: discord-office
+      runtime: docker
+      plan: 0.5c-512mb
+      region: singapore
+      numInstances: 1
+      dockerfilePath: ./Dockerfile
+      dockerContext: .
+      healthCheckPath: /health
+      envVars:
+          - key: NODE_ENV
+            value: production
+          - key: HOST
+            value: 0.0.0.0
+          - key: PORT
+            value: '10000'
+          - key: SESSION_SECRET
+            generateValue: true
+          - key: DISCORD_CLIENT_ID
+            sync: false
+          - key: DISCORD_CLIENT_SECRET
+            sync: false
+          - key: DISCORD_TOKEN
+            sync: false
+          - key: GUILD_ID
+            sync: false
+          - key: WEB_URL
+            value: https://bot-office-nwl0.onrender.com
+          - key: DISCORD_REDIRECT_URI
+            value: https://bot-office-nwl0.onrender.com/auth/callback

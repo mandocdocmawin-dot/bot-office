@@ -1,0 +1,27 @@
+{
+    "name": "@office/shared",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "import": "./src/index.ts"
+        },
+        "./protocol": {
+            "types": "./src/protocol.ts",
+            "import": "./src/protocol.ts"
+        },
+        "./math": {
+            "types": "./src/math.ts",
+            "import": "./src/math.ts"
+        },
+        "./rooms": {
+            "types": "./src/rooms.ts",
+            "import": "./src/rooms.ts"
+        }
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit"
+    }
+}

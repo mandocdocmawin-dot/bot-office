@@ -1,10 +1,10 @@
 # Discord Office visual system
 
-The existing nine-room layout is a miniature isometric office on a raised cutaway platform, matching the supplied game-office reference. Neon rear rails identify rooms; door openings and corridor diamonds show where to walk. Desks have monitors and chairs; the studio has easels, the study has bookshelves, and Nap Room has beds. Geometry and colors come from config.json. No raster backdrop substitutes for the live map.
+Nine-room isometric office on raised cutaway platform. Neon rails mark room bounds; doors and corridor diamonds mark walkable paths. Desks have monitors and chairs; studio has easels; study has bookshelves; Nap Room has beds. All geometry and colors load from `config.json`. Live map uses procedural drawing; no static raster backdrop.
 
-The existing dark shell, Manrope headings, DM Sans controls, camera, search and grouped roster remain. Character bodies use simple block geometry with each Discord avatar as the face. Depth sorting follows projected ground position. Interpolated server positions and a small walking bob communicate movement. Reduced-motion preference removes the bob and positional interpolation.
+Dark shell, Manrope headings, DM Sans controls, camera pan/zoom, search, and grouped roster. Character bodies use block geometry with Discord avatars for faces. Depth sort follows projected ground coordinate (`y`). Server positions interpolate with walking bob. Reduced-motion disables bob and position interpolation.
 
-The map is the primary interface. Expand makes it fill the browser; Find me and roster names follow a player. Mouse/touch click-to-move supports smaller screens. Room chat is a small transient input panel, not a message history. Login explains exactly what profile data appears and that chat is never stored.
+Map is primary UI. Expand fills browser; Find Me and roster names follow target player. Click/tap moves character. Room chat transient; no message history stored. Login details visible profile data; chat never logged.
 
 Keyboard transitions send immediately, with held input renewed separately. Screen diagonals use the inverse projection and normalized world speed. Own-avatar interpolation uses an 18ms time constant, remote avatars retain 55ms, and an authoritative stop removes the own-avatar interpolation tail. Reduced motion continues to use authoritative positions directly.
 

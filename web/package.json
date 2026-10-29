@@ -1,19 +1,21 @@
 {
-  "name": "@office/web",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "preview": "vite preview --host 127.0.0.1"
-  },
-  "dependencies": {
-    "@discord/embedded-app-sdk": "^2.5.0",
-    "phaser": "^3.90.0"
-  },
-  "devDependencies": {
-    "vite": "^7.1.0"
-  }
+    "name": "@office/web",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vp dev --host 127.0.0.1",
+        "build": "tsc --noEmit && vp build",
+        "typecheck": "tsc --noEmit",
+        "preview": "vp preview --host 127.0.0.1"
+    },
+    "dependencies": {
+        "@discord/embedded-app-sdk": "^2.5.0",
+        "@office/shared": "*",
+        "phaser": "^3.90.0"
+    },
+    "devDependencies": {
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+        "vite-plus": "1.4.0"
+    }
 }

@@ -1,5 +1,6 @@
-import config from '../../config.json';
-import type { RoomLayout } from '../../server/src/protocol';
-export const rooms = config.rooms as RoomLayout[];
-export const doors = config.doors;
-export const colorCSS = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
+import config from '../../config.json'
+import type { RoomLayout } from '@office/shared/protocol'
+
+export { colorCSS } from '@office/shared/rooms'
+export const rooms = config.rooms as RoomLayout[]
+export const { doors } = config

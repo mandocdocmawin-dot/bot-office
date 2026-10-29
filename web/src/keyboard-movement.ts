@@ -1,4 +1,4 @@
-import type { Point } from '../../server/src/protocol';
+import type { Point } from '@office/shared/protocol'
 
 const codes: Record<string, string> = {
   KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd',
