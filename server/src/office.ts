@@ -10,6 +10,7 @@ import type {
     VoiceMonitorStatus
 } from './protocol.js'
 import { World } from './world.js'
+import { isMediaUrl } from './media.js'
 
 interface Player extends Member {
     lastInput: number
@@ -185,7 +186,11 @@ export class Office {
             const trimmed = content.replaceAll(/[\u0000-\u001F\u007F]/g, ' ').trim()
             const text =
                 trimmed.startsWith('http://') || trimmed.startsWith('https://')
-                    ? trimmed.slice(0, 500)
+                    ? isMediaUrl(trimmed)
+                        ? trimmed.length <= 2000
+                            ? trimmed
+                            : ''
+                        : trimmed.slice(0, 500)
                     : [...trimmed].slice(0, Math.min(40, this.config.bubble_max_chars)).join('')
             if (text) {
                 this.bubble(id, p.room, text)

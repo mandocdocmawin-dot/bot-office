@@ -4,7 +4,7 @@ import type { Office } from './office.js'
 import { channelKey, textRoom, voiceRoom } from './discord-routing.js'
 import type { Member } from './protocol.js'
 import { SpeakingIndicator } from './voice.js'
-import { extractMediaContent } from './discord-message.js'
+import { extractMediaContent, changedMessagePreview } from './discord-message.js'
 
 const presence = (status?: string): NonNullable<Member['presence']> =>
     status === 'online' || status === 'idle' || status === 'dnd' ? status : 'offline'
@@ -138,9 +138,8 @@ export function startDiscord(
         if (newMessage.guildId !== guildId || !newMessage.author || newMessage.author.bot) {
             return
         }
-        const oldContent = extractMediaContent(oldMessage)
-        const newContent = extractMediaContent(newMessage)
-        if (newContent && newContent !== oldContent && (!oldContent || !oldContent.startsWith('http'))) {
+        const newContent = changedMessagePreview(oldMessage, newMessage)
+        if (newContent) {
             if (newMessage.member) {
                 upsert(newMessage.member)
             }

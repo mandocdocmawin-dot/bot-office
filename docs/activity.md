@@ -20,6 +20,8 @@ Office runs directly inside Discord client via Embedded App SDK.
 - Avatars routed through `/discord-cdn/` sandbox proxy.
 - GIF bubbles use the authenticated, same-origin `/api/media/image` route under the existing `/` URL mapping. The Activity never loads GIF provider URLs directly. Giphy links resolve from their public GIF id; Tenor/Klipy pages use image metadata. Only supported provider hosts and raster image types are accepted, redirects are checked, and downloads are bounded to 8 MiB with four distinct concurrent downloads. Viewers of the same GIF share its in-flight download. A loaded GIF stays visible for the full configured bubble duration.
 - Chat typing shares the throttled activity signal with keyboard/pointer events, so typing a GIF link does not flood the WebSocket.
+- Discord GIF-picker messages prefer the resolved image from Discord's embed over the share-page URL. A late embed update replaces the earlier preview, including when the original preview was already a URL. Discord external image proxies are supported, and signed media URLs from bot messages are preserved intact up to 2000 characters instead of being truncated at 500.
+- Original image URLs take priority over Discord thumbnail proxies, which can flatten animated Klipy WebP previews. Animated original WebP bytes are preserved by the app's image route.
 
 ## Session Resumption
 
