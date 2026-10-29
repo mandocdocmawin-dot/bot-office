@@ -23,7 +23,9 @@ RUN npm ci --omit=dev --workspace=@office/server --include-workspace-root \
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
-    PORT=10000
+    PORT=10000 \
+    WEB_URL=https://bot-office-nwl0.onrender.com \
+    DISCORD_REDIRECT_URI=https://bot-office-nwl0.onrender.com/auth/callback
 WORKDIR /app
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY package.json package-lock.json config.json ./

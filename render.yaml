@@ -26,6 +26,6 @@ services:
       - key: GUILD_ID
         sync: false
       - key: WEB_URL
-        sync: false
+        value: https://bot-office-nwl0.onrender.com
       - key: DISCORD_REDIRECT_URI
-        sync: false
+        value: https://bot-office-nwl0.onrender.com/auth/callback
