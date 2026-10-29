@@ -57,11 +57,11 @@ export function parsePacket(raw: string): ClientPacket | undefined {
     }
 }
 export class RateLimit {
-    private tokens = 50
+    private tokens = 75
     private last = Date.now()
     take() {
         const now = Date.now()
-        this.tokens = Math.min(50, this.tokens + (now - this.last) * 0.03)
+        this.tokens = Math.min(75, this.tokens + (now - this.last) * 0.035)
         this.last = now
         if (this.tokens < 1) {
             return false
@@ -75,7 +75,7 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
     const disconnected = new Map<string, { player: Member; expires: number }>()
     const send = (socket: WebSocket, packet: Packet) => {
         if (socket.readyState === WebSocket.OPEN) {
-            if (socket.bufferedAmount > 500_000) {
+            if (socket.bufferedAmount > 1_500_000) {
                 socket.close(4008, 'Client too slow')
             } else {
                 socket.send(JSON.stringify(packet))
@@ -368,8 +368,11 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
             const raw = JSON.stringify({ type: 'state', at: Date.now(), state: office.snapshot() })
             for (const socket of connections.values()) {
                 if (socket.readyState === WebSocket.OPEN) {
-                    if (socket.bufferedAmount > 500_000) {
+                    if (socket.bufferedAmount > 1_500_000) {
                         socket.close(4008, 'Client too slow')
+                    } else if (socket.bufferedAmount > 300_000) {
+                        // Drop intermediate snapshot when client TCP buffer is saturated to allow it to catch up
+                        continue
                     } else {
                         socket.send(raw)
                     }

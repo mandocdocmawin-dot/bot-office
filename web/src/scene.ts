@@ -39,6 +39,7 @@ export class OfficeScene extends Phaser.Scene {
     private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
     private selfId = ''
     private frozen = false
+    private lastUpdate = 0
     private avatarManager!: AvatarTextureManager
     constructor() {
         super('office')
@@ -166,9 +167,17 @@ export class OfficeScene extends Phaser.Scene {
             })
         }
         canvas.addEventListener('wheel', wheel, { passive: false })
+        const onFocus = () => {
+            for (const c of this.people.values()) {
+                c.root.x = c.targetX
+                c.root.y = c.targetY
+            }
+        }
+        window.addEventListener('focus', onFocus)
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
             canvas.removeEventListener('wheel', wheel)
             this.scale.off('resize', resize)
+            window.removeEventListener('focus', onFocus)
         })
         this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
             if (!p.isDown) {
@@ -246,21 +255,33 @@ export class OfficeScene extends Phaser.Scene {
         }
     }
     update(time: number, delta: number) {
+        const now = performance.now()
+        const realDelta = this.lastUpdate > 0 ? Math.min(now - this.lastUpdate, 250) : delta
+        this.lastUpdate = now
+        const effectiveDelta = Math.max(delta, realDelta)
+        const snap = effectiveDelta >= 200
         for (const c of this.people.values()) {
             const own = c.member.id === this.selfId
-            const blend =
-                this.reducedMotion.matches || (own && !c.member.moving) ? 1 : 1 - Math.exp(-delta / (own ? 18 : 55))
             const previousX = c.root.x
             const previousY = c.root.y
-            if (Math.abs(c.targetX - c.root.x) < 0.05) {
+            if (snap) {
                 c.root.x = c.targetX
-            } else {
-                c.root.x += (c.targetX - c.root.x) * blend
-            }
-            if (Math.abs(c.targetY - c.root.y) < 0.05) {
                 c.root.y = c.targetY
             } else {
-                c.root.y += (c.targetY - c.root.y) * blend
+                const blend =
+                    this.reducedMotion.matches || (own && !c.member.moving)
+                        ? 1
+                        : 1 - Math.exp(-effectiveDelta / (own ? 18 : 55))
+                if (Math.abs(c.targetX - c.root.x) < 0.05) {
+                    c.root.x = c.targetX
+                } else {
+                    c.root.x += (c.targetX - c.root.x) * blend
+                }
+                if (Math.abs(c.targetY - c.root.y) < 0.05) {
+                    c.root.y = c.targetY
+                } else {
+                    c.root.y += (c.targetY - c.root.y) * blend
+                }
             }
             const travelled = Math.hypot(c.root.x - previousX, c.root.y - previousY)
             const targetDepth = (c.bubble ? 4000 : 1000) + Math.round(c.root.y)
@@ -373,6 +394,12 @@ export class OfficeScene extends Phaser.Scene {
     setSelf(id: string) {
         this.selfId = id
     }
+    setSpeaking(id: string, speaking: boolean) {
+        const c = this.people.get(id)
+        if (c) {
+            c.member.speaking = speaking
+        }
+    }
     setFrozen(value: boolean) {
         this.frozen = value
     }
@@ -443,7 +470,7 @@ export class OfficeScene extends Phaser.Scene {
     }
     private makeCharacter(m: Member, x: number, y: number): Character {
         const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
-        const shirt = [0x77_cc_bb, 0xb296dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
+        const shirt = [0x77_cc_bb, 0xb2_96_dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
         const root = this.add.container(x, y).setSize(32, 64)
         const shadow = this.add.ellipse(0, 0, 33, 14, 0x02_03_08, 0.5)
         const body = this.add.container(0, 0)
@@ -578,7 +605,9 @@ export class OfficeScene extends Phaser.Scene {
         if (/cdn\.discordapp\.com\/attachments\//i.test(trimmed)) {
             return true
         }
-        if (/^https:\/\/images-ext-\d+\.discordapp\.net\//i.test(trimmed)) return true
+        if (/^https:\/\/images-ext-\d+\.discordapp\.net\//i.test(trimmed)) {
+            return true
+        }
         return false
     }
 

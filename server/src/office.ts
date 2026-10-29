@@ -272,7 +272,7 @@ export class Office {
             const magnitude = Math.max(1, Math.hypot(packet.dx, packet.dy))
             p.dx = packet.dx / magnitude
             p.dy = packet.dy / magnitude
-            p.inputUntil = this.now() + 220
+            p.inputUntil = this.now() + 400
             // A stale key-up/blur packet must not erase a newly assigned Discord path.
             if (movement || p.manualDriving) {
                 p.path = []

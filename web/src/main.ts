@@ -130,8 +130,9 @@ function office(user: Identity, mock: boolean) {
         },
         fps: {
             target: 60,
-            smoothStep: true
+            smoothStep: false
         },
+        autoFocus: false,
         dom: {
             createContainer: true
         },
@@ -152,17 +153,24 @@ function office(user: Identity, mock: boolean) {
     const activitySignal = createActivitySignal(() => send({ type: 'wake' }))
     const activitySpeaking = new ActivitySpeaking()
     let activityVoice = false
+    function setRosterSpeaking(id: string, active: boolean) {
+        const row = el('roster').querySelector<HTMLElement>(`[data-member-id="${id}"]`)
+        if (row) {
+            row.querySelector('.member-avatar')?.classList.toggle('speaking-avatar', active)
+            const state = row.querySelector('.member-state')
+            if (state) {
+                state.classList.toggle('speaking', active)
+            }
+        }
+    }
     if (inActivity && !mock) {
         void watchActivitySpeaking((id, active, channelId) => {
             if (stopped) {
                 return
             }
             activitySpeaking.set(id, active, channelId)
-            if (serverSnapshot && socket?.readyState === WebSocket.OPEN) {
-                snapshot = { ...serverSnapshot, members: activitySpeaking.apply(serverSnapshot.members) }
-                scene.sync(snapshot)
-                renderRoster()
-            }
+            scene.setSpeaking(id, active)
+            setRosterSpeaking(id, active)
         })
             .then((cleanup) => {
                 activityVoice = true
@@ -242,6 +250,7 @@ function office(user: Identity, mock: boolean) {
                 const row = document.createElement('button')
                 row.type = 'button'
                 row.className = 'member-row'
+                row.dataset.memberId = member.id
                 if (member.id === selfId) {
                     row.classList.add('is-self')
                 }
@@ -465,7 +474,16 @@ function office(user: Identity, mock: boolean) {
         }
     })
     el('help').addEventListener('click', stopMovement)
-    setInterval(() => keys.heartbeat(), 70)
+    let lastHeartbeat = 0
+    const triggerHeartbeat = () => {
+        const now = performance.now()
+        if (now - lastHeartbeat >= 60) {
+            lastHeartbeat = now
+            keys.heartbeat()
+        }
+    }
+    setInterval(triggerHeartbeat, 70)
+    scene.events.on('update', triggerHeartbeat)
     function connect() {
         if (stopped) {
             return
@@ -514,12 +532,9 @@ function office(user: Identity, mock: boolean) {
             }
             serverSnapshot = packet.state
             if (inActivity) {
-                serverSnapshot = {
-                    ...serverSnapshot,
-                    members: serverSnapshot.members.map((member) => ({
-                        ...member,
-                        avatar: activityAvatar(member.avatar)
-                    }))
+                for (let i = 0; i < serverSnapshot.members.length; i++) {
+                    const m = serverSnapshot.members[i]
+                    m.avatar = activityAvatar(m.avatar)
                 }
             }
             snapshot = { ...serverSnapshot, members: activitySpeaking.apply(serverSnapshot.members) }
@@ -588,7 +603,7 @@ function office(user: Identity, mock: boolean) {
             keys.clear()
             el('connection').classList.remove('connected')
             el('map-notice').hidden = false
-            if ([4000, 4001, 4008, 1008].includes(event.code)) {
+            if ([4000, 4001, 1008].includes(event.code)) {
                 stopped = true
                 el('connection').textContent = 'Disconnected'
                 el('map-notice').textContent =
@@ -596,7 +611,7 @@ function office(user: Identity, mock: boolean) {
                         ? 'This account opened another tab. This tab has stopped. Reload to play here.'
                         : event.code === 4001
                           ? 'Your session ended. Refresh to sign in again.'
-                          : 'Connection closed: invalid or excessive input. Refresh to reconnect.'
+                          : 'Connection closed: invalid input. Refresh to reconnect.'
                 return
             }
             el('connection').textContent = 'Reconnecting'
