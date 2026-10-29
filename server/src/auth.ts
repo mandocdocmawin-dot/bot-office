@@ -3,7 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Identity } from './protocol.js';
 import { OAuthRateLimitError, readOAuthCooldown } from './oauth-rate-limit.js';
 export interface AuthOptions { clientId: string; clientSecret: string; redirectUri: string; guildId: string; secret: string; webUrl: string; mock: boolean }
-interface Session { user: Identity; expires: number }
+interface ActivityAuth { accessToken: string; expires: number }
+interface Session { user: Identity; expires: number; activityAuth?: ActivityAuth }
 interface Flow { verifier: string; expires: number }
 export class Auth {
   private sessions = new Map<string, Session>();
@@ -43,15 +44,16 @@ export class Auth {
     if (!session || session.expires <= this.now()) { this.sessions.delete(id); return; }
     return session.user;
   }
-  createSession(user: Identity, res: ServerResponse, activity = false) {
+  createSession(user: Identity, res: ServerResponse, activity = false, activityAuth?: ActivityAuth) {
     for (const [id, session] of this.sessions) if (session.user.id === user.id) this.sessions.delete(id);
     this.onInvalidate(user.id);
     this.sweep(); if (this.sessions.size >= 2000) throw new Error('Office session capacity reached');
-    const id = randomBytes(32).toString('base64url'); this.sessions.set(id, { user, expires: this.now() + 8 * 60 * 60 * 1000 });
+    const id = randomBytes(32).toString('base64url'); this.sessions.set(id, { user, expires: this.now() + 8 * 60 * 60 * 1000, ...(activity && activityAuth ? { activityAuth } : {}) });
     this.setCookie(res, activity ? 'office_activity_session' : this.cookieName, this.pack(id), 8 * 60 * 60);
   }
   sweep() {
     for (const [id, s] of this.sessions) if (s.expires <= this.now()) this.sessions.delete(id);
+    for (const s of this.sessions.values()) if (s.activityAuth && s.activityAuth.expires <= this.now()) delete s.activityAuth;
     for (const [id, f] of this.flows) if (f.expires <= this.now()) this.flows.delete(id);
   }
   revokeUser(userId: string) { for (const [id, session] of this.sessions) if (session.user.id === userId) this.sessions.delete(id); this.onInvalidate(userId); }
@@ -92,6 +94,16 @@ export class Auth {
     const path = url.pathname;
     if (path === '/api/activity/config' && req.method === 'GET') {
       this.json(res, { clientId: this.options.clientId, loginRetryAfterSeconds: this.retryAfterSeconds() }); return true;
+    }
+    if (path === '/api/activity/resume' && req.method === 'POST') {
+      if (this.options.mock || req.headers.origin !== this.activityOrigin()) { this.json(res, { error: 'Invalid Activity origin' }, 403); return true; }
+      const id = this.unpack(this.cookie(req, 'office_activity_session'));
+      const session = id ? this.sessions.get(id) : undefined;
+      if (!session || session.expires <= this.now() || !session.activityAuth || session.activityAuth.expires <= this.now()) {
+        this.json(res, { error: 'session_unavailable' }, 401); return true;
+      }
+      // A valid signed session may resume during a provider cooldown, without calling Discord.
+      this.json(res, { user: session.user, access_token: session.activityAuth.accessToken }); return true;
     }
     if (path === '/api/session' && req.method === 'GET') {
       let user = this.session(req);
@@ -143,14 +155,14 @@ export class Auth {
       let stage = 'token_exchange', status: number | null = null, reason = 'request_failed';
       try {
         const tokenResponse = await this.oauthRequest('https://discord.com/api/oauth2/token', {
-          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ client_id: this.options.clientId, client_secret: this.options.clientSecret, grant_type: 'authorization_code', code,
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${Buffer.from(`${encodeURIComponent(this.options.clientId)}:${encodeURIComponent(this.options.clientSecret)}`).toString('base64')}` },
+          body: new URLSearchParams({ grant_type: 'authorization_code', code,
             ...(!activity ? { redirect_uri: this.options.redirectUri, code_verifier: verifier! } : {}) })
         });
         status = tokenResponse.status;
         if (!tokenResponse.ok) { reason = 'http_error'; throw new Error('Exchange failed'); }
         reason = 'invalid_token_response';
-        const token = await tokenResponse.json() as { access_token?: string; scope?: string };
+        const token = await tokenResponse.json() as { access_token?: string; scope?: string; expires_in?: number };
         if (!token.access_token || !['identify', 'guilds'].every(scope => token.scope?.split(' ').includes(scope))) throw new Error('Missing scopes');
         const headers = { Authorization: `Bearer ${token.access_token}` };
         stage = 'profile'; status = null; reason = 'request_failed';
@@ -178,12 +190,13 @@ export class Auth {
         const avatar = profile.avatar && /^[a-zA-Z0-9_]+$/.test(profile.avatar) ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=64` : `https://cdn.discordapp.com/embed/avatars/${defaultAvatar}.png`;
         stage = 'session'; reason = 'session_creation_failed';
         const user = { id: profile.id, username: profile.global_name || profile.username, avatar };
-        this.createSession(user, res, activity);
+        const tokenLifetime = typeof token.expires_in === 'number' && Number.isFinite(token.expires_in) && token.expires_in > 60 ? Math.min(token.expires_in - 60, 8 * 60 * 60) : 0;
+        this.createSession(user, res, activity, activity && tokenLifetime > 0 ? { accessToken: token.access_token, expires: this.now() + tokenLifetime * 1000 } : undefined);
         if (activity) this.json(res, { user, access_token: token.access_token });
         else this.redirect(res, this.options.webUrl);
       } catch (error) {
         if (error instanceof OAuthRateLimitError) {
-          console.error('[oauth] login_failed', JSON.stringify({ stage, status: 429, reason: 'rate_limited', ...error.cooldown, retryAt: new Date(this.oauthRetryAt).toISOString() }));
+          console.error('[oauth] login_failed', JSON.stringify({ stage, status: 429, reason: 'rate_limited', flow: activity ? 'activity' : 'browser', clientAuth: 'basic', ...error.cooldown, retryAt: new Date(this.oauthRetryAt).toISOString() }));
           if (activity) this.json(res, { error: 'rate_limited', retryAfterSeconds: this.retryAfterSeconds() }, 429);
           else this.cooldownRedirect(res);
           return true;
@@ -195,7 +208,7 @@ export class Auth {
         if (activity) this.json(res, { error: 'failed' }, 502);
         else this.redirect(res, `${this.options.webUrl}/?login_error=failed`);
       }
-      // Only the Activity receives an access token for SDK authenticate; never persisted.
+      // Activity tokens live only in bounded server memory and SDK memory, never on disk.
       return true;
     }
     return false;

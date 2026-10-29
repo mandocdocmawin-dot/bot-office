@@ -17,9 +17,19 @@ export async function activityLogin(): Promise<Identity> {
   if (!configResponse.ok) throw new Error('The office server is unavailable. Try again shortly.');
   const config = await configResponse.json() as { clientId: string; loginRetryAfterSeconds: number };
   if (location.hostname !== `${config.clientId}.discordsays.com`) throw new Error('The Activity application ID does not match the office server.');
-  if (config.loginRetryAfterSeconds > 0) throw new ActivityCooldownError(config.loginRetryAfterSeconds);
   sdk ??= new DiscordSDK(config.clientId);
   await sdk.ready();
+  const resumed = await fetch('/api/activity/resume', { method: 'POST', credentials: 'include' });
+  if (resumed.ok) {
+    const previous = await resumed.json() as { user: Identity; access_token: string };
+    try {
+      const authenticated = await sdk.commands.authenticate({ access_token: previous.access_token });
+      if (authenticated?.user.id === previous.user.id) return previous.user;
+    } catch { /* A revoked token must complete a fresh authorization below. */ }
+  } else if (![401, 404].includes(resumed.status)) {
+    throw new Error('The office session could not be restored. Retry the connection shortly.');
+  }
+  if (config.loginRetryAfterSeconds > 0) throw new ActivityCooldownError(config.loginRetryAfterSeconds);
   const { code } = await sdk.commands.authorize({ client_id: config.clientId, response_type: 'code', state: '', prompt: 'none', scope: ['identify', 'guilds'] });
   const response = await fetch('/api/activity/token', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
   const result = await response.json() as { user: Identity; access_token: string; error?: string; retryAfterSeconds?: number };

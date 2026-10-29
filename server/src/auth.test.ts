@@ -17,10 +17,12 @@ async function fixture(nonMember = false, failExchange = false, rateLimit?: { st
     if (limited && stage === rateLimit?.stage) { limited = false; return rateLimit.response(); }
     if (path.endsWith('/oauth2/token')) {
       if (failExchange) return new Response('{}', { status: 400 });
-      const body = init!.body as URLSearchParams; assert.equal(body.get('client_secret'), options.clientSecret);
+      const body = init!.body as URLSearchParams;
+      assert.equal(new Headers(init!.headers).get('authorization'), `Basic ${Buffer.from(`${encodeURIComponent(options.clientId)}:${encodeURIComponent(options.clientSecret)}`).toString('base64')}`);
+      assert.equal(body.has('client_secret'), false); assert.equal(body.has('client_id'), false);
       if (activity) { assert.equal(body.has('code_verifier'), false); assert.equal(body.has('redirect_uri'), false); }
       else assert.ok(body.get('code_verifier'));
-      return Response.json({ access_token: body.get('code') ?? '123', scope: 'identify guilds' });
+      return Response.json({ access_token: body.get('code') ?? '123', scope: 'identify guilds', expires_in: 3600 });
     }
     const id = (init?.headers as Record<string, string>)?.Authorization.replace('Bearer ', '') ?? '123';
     if (path.endsWith('/users/@me')) return Response.json({ id, username: `User ${id}`, global_name: `Display ${id}`, avatar: null });
@@ -41,7 +43,7 @@ async function fixture(nonMember = false, failExchange = false, rateLimit?: { st
     return { callback, flow, cookie: callback.headers.getSetCookie().some(c => c.startsWith('office_session=')) ? cookie(callback, 'office_session') : '' };
   }
   async function socket(session: string) { const ws = new WebSocket(`${base.replace('http:', 'ws:')}/ws`, { headers: { Cookie: session, Origin: options.webUrl } }); const initial = packet(ws, p => p.type === 'snapshot'); await once(ws, 'open'); return { ws, initial: await initial }; }
-  return { app, base, requests, begin, login, socket };
+  return { app, base, requests, begin, login, socket, limitNext(value: NonNullable<typeof rateLimit>) { rateLimit = value; limited = true; } };
 }
 function packet(ws: WebSocket, match: (p: Packet) => boolean): Promise<Packet> {
   return new Promise((resolve, reject) => {
@@ -53,6 +55,35 @@ function packet(ws: WebSocket, match: (p: Packet) => boolean): Promise<Packet> {
 
 const activityOrigin = `https://${options.clientId}.discordsays.com`;
 const activityHeaders = { Origin: activityOrigin, 'Content-Type': 'application/json' };
+test('Activity resumes a valid session during cooldown without provider requests; expiry, logout and invalid origins fail closed', async t => {
+  const f = await fixture(false, false, undefined, true);
+  try {
+    const login = await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: activityHeaders, body: JSON.stringify({ code: '123' }) });
+    const session = cookie(login, 'office_activity_session');
+    f.limitNext({ stage: 'token_exchange', response: () => Response.json({ retry_after: 3600 }, { status: 429 }) });
+    const blocked = await fetch(`${f.base}/api/activity/token`, { method: 'POST', headers: activityHeaders, body: JSON.stringify({ code: '456' }) });
+    assert.equal(blocked.status, 429);
+    const count = f.requests.length;
+    const resume = () => fetch(`${f.base}/api/activity/resume`, { method: 'POST', headers: { Origin: activityOrigin, Cookie: session } });
+    const restored = await resume(); assert.equal(restored.status, 200); assert.equal(restored.headers.get('cache-control'), 'no-store');
+    const data = await restored.json(); assert.equal(data.user.id, '123'); assert.equal(data.access_token, '123');
+    assert.equal(f.requests.length, count, 'resume must not exchange a new code or re-fetch profile/guilds');
+    for (const headers of [{}, { Origin: 'https://evil.example', Cookie: session }, { Origin: 'https://other.discordsays.com', Cookie: session }]) {
+      const denied = await fetch(`${f.base}/api/activity/resume`, { method: 'POST', headers }); assert.equal(denied.status, 403);
+      assert.ok(!(await denied.text()).includes('access_token'));
+    }
+    for (const supplied of ['', 'office_activity_session=forged']) {
+      const denied = await fetch(`${f.base}/api/activity/resume`, { method: 'POST', headers: { Origin: activityOrigin, Cookie: supplied } }); assert.equal(denied.status, 401);
+    }
+    const now = Date.now(); const clock = t.mock.method(Date, 'now', () => now + 3600 * 1000);
+    assert.equal((await resume()).status, 401, 'expired SDK token must not be returned even while office session remains valid');
+    clock.mock.restore();
+    await fetch(`${f.base}/auth/logout`, { method: 'POST', headers: { Origin: activityOrigin, Cookie: session } });
+    assert.equal((await resume()).status, 401);
+    assert.equal(f.requests.length, count);
+  } finally { await f.app.close(); }
+});
+
 test('Activity exchanges SDK code, verifies membership and uses a partitioned session for HTTP, WebSocket and logout', async () => {
   const f = await fixture(false, false, undefined, true);
   try {
