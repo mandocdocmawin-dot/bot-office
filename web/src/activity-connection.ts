@@ -7,7 +7,7 @@ export async function connectActivity(
     enter: (user: Identity) => void,
     cooldownType: new (...args: never[]) => Error & { retryAt: number }
 ) {
-    root.innerHTML = `<main class="activity-connection"><section aria-labelledby="activity-heading"><div class="brand">discord office</div><h1 id="activity-heading">Opening your office</h1><p id="activity-message" role="status">Connecting through Discord. Your office will open automatically.</p><p id="activity-countdown" role="timer" aria-live="off" hidden></p><button id="activity-retry" class="text-button" hidden>Retry connection</button></section></main>`
+    root.innerHTML = `<main class="activity-connection"><section aria-labelledby="activity-heading"><div class="brand">THE ROBLOXXX NA V.2</div><h1 id="activity-heading">Opening your office</h1><p id="activity-message" role="status">Connecting through Discord. Your office will open automatically.</p><p id="activity-countdown" role="timer" aria-live="off" hidden></p><button id="activity-retry" class="text-button" hidden>Retry connection</button></section></main>`
     const heading = root.querySelector<HTMLElement>('#activity-heading')!
     const message = root.querySelector<HTMLElement>('#activity-message')!
     const countdown = root.querySelector<HTMLElement>('#activity-countdown')!

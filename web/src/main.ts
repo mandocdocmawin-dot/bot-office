@@ -10,7 +10,9 @@ import { createActivitySignal } from './activity-signal'
 import { connectActivity } from './activity-connection'
 import { createCharacterCustomizer } from './character-customizer'
 import { characterImage } from './character-styles'
+import { officeShell } from './office-shell'
 import './style.css'
+import './fullscreen.css'
 
 const apiBase = (inActivity ? '' : import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const api = (path: string) => `${apiBase}${path}`
@@ -56,7 +58,7 @@ function login(error?: string, retryAfterSeconds = 0) {
         failed: 'Discord sign-in failed. Check the application settings and try again.'
     }
     const code = new URLSearchParams(location.search).get('login_error') ?? ''
-    app.innerHTML = `<main class="login-page"><div class="login-card"><div class="brand"><span class="brand-mark">◉</span>discord office</div><h1>Your people.<br>Your little office.</h1><p>A shared space to work, wander, and hang out with your Discord server.</p><p id="login-error" role="alert"></p><a id="discord-login" class="login-button">Continue with Discord</a><p class="login-privacy">We request only your profile and server list to verify membership. Your display name, avatar, and position appear to people in this office. Room chat disappears after five seconds and is never stored or logged. Log out any time.</p><button class="text-button" id="retry">Refresh connection</button></div><div class="login-art" aria-hidden="true"><span>⌂</span><p>One server. Under one roof.</p></div></main>`
+    app.innerHTML = `<main class="login-page"><div class="login-card"><div class="brand"><span class="brand-mark">◉</span>THE ROBLOXXX NA V.2</div><h1>Your people.<br>Your little office.</h1><p>A shared space to work, wander, and hang out with your Discord server.</p><p id="login-error" role="alert"></p><a id="discord-login" class="login-button">Continue with Discord</a><p class="login-privacy">We request only your profile and server list to verify membership. Your display name, avatar, and position appear to people in this office. Room chat disappears after five seconds and is never stored or logged. Log out any time.</p><button class="text-button" id="retry">Refresh connection</button></div><div class="login-art" aria-hidden="true"><span>⌂</span><p>One server. Under one roof.</p></div></main>`
     el('login-error').textContent = error || messages[code] || ''
     const loginLink = el<HTMLAnchorElement>('discord-login')
     loginLink.href = api('/auth/login')
@@ -96,17 +98,8 @@ function login(error?: string, retryAfterSeconds = 0) {
 }
 
 function office(user: Identity, mock: boolean) {
-    app.innerHTML = `
-  <header class="topbar"><a class="brand" href="/" aria-label="Discord Office home"><span class="brand-mark">◉</span><span>discord<span class="brand-light">office</span></span></a><span class="header-divider"></span><span id="server-name">The Discord Office</span><div class="top-right"><span class="connection" id="connection" role="status">Connecting</span><button id="logout" class="text-button">Log out</button><button id="help" class="icon-button" aria-label="About the office">?</button></div></header>
-  <div class="workspace"><main><div class="page-heading"><div><h1>A little closer together.</h1><p id="office-description">Your character. Your pace. Make yourself at home.</p></div><span class="mode demo" id="mode">${mock ? 'Demo office' : 'Live office'}</span></div><p id="discord-status" role="status" hidden></p><p id="voice-status" role="status" hidden></p>
-  <div class="map-shell"><div class="map-toolbar"><div><span class="live-dot"></span><strong>Office floor</strong><span class="floor-label">Isometric view</span></div><div class="map-actions"><button id="focus-self" class="text-button">Find me</button><button id="expand" class="text-button">Expand</button><button id="fit" class="text-button">↗ Fit to view</button></div></div>
-  <div id="map" role="img" aria-label="Multiplayer isometric office. Click the floor to walk; drag to pan. Use the roster to focus on a player."></div><div id="map-notice" role="status" hidden></div>
-  <div class="play-dock"><button id="chat-open" aria-label="Open room chat">Chat <kbd>Enter</kbd></button><span class="emote-buttons">${['👋', '❤️', '😂', '🎉', '☕'].map((e, i) => `<button class="emote" data-index="${i}" aria-label="Emote ${i + 1}">${e}</button>`).join('')}</span><span id="room-hint">Front Office</span></div>
-  <form id="chat-form" hidden><label for="chat-input">Room chat</label><input id="chat-input" autocomplete="off" placeholder="Say something or paste a GIF link…" maxlength="500"><span id="chat-count">0/80</span><button>Send</button><button id="chat-close" type="button" aria-label="Close chat">×</button></form>
-  <div class="map-bottom"><span id="movement-hint">WASD / arrows to walk · Click to move · Drag to pan</span><div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><output id="zoom-value">100%</output><button id="zoom-in" aria-label="Zoom in">+</button></div></div></div>
-  <footer class="map-footer"><span><i class="legend-dot voice"></i>Online <i class="legend-dot nap"></i>Napping · Emotes 1–5</span><span id="update-time">Connecting…</span></footer></main>
-  <aside aria-label="Office room roster"><div class="roster-heading"><h2>In the office</h2><span id="total">0</span></div><p class="roster-subtitle" id="roster-subtitle">Finding your people…</p><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a teammate" aria-label="Find a teammate"></label><button class="all-rooms" id="all-rooms">All rooms <span>↗</span></button><div id="roster"></div><div class="privacy-note"><span>◈</span><div><strong id="privacy-title">Only here while you are.</strong><p id="privacy-description">Only connected players appear. Room chat is transient. Log out to leave.</p><button id="bubbles" class="text-button" aria-pressed="true">Speech bubbles on</button></div></div></aside></div>
-  <dialog id="help-dialog"><button id="close-help" class="icon-button" aria-label="Close help">×</button><h2>Make yourself at home.</h2><p>Walk with WASD, arrow keys, or a floor click. New Discord chat/voice activity sets a room destination; manual movement takes over whenever you choose. Moving manually cancels a pending two-minute return to Commons. Ten quiet minutes sends you to Nap Room.</p><p>General voice belongs to Commons. Other calls under CALL FOR VOICE belong to Meeting Room. A green ring and animated bars mean the member is speaking in a monitored Discord call; a voice label alone means connected, not speaking. The bot monitors one occupied voice channel at a time. No call audio is recorded, decoded or played in the map.</p><p>Drag to pan, scroll or use +/− to zoom. Fit to view resets the camera. Click a name to follow them, or use Find me. Message previews are transient. Logging out ends your viewer session, not your Discord character.</p><p>${mock ? 'This is a demo with fictional players and simulated speaking indicators. No real Discord audio is read.' : 'You signed in with Discord. Server membership is checked during login.'}</p></dialog>`
+    document.title = 'THE ROBLOXXX NA V.2'
+    app.innerHTML = officeShell(mock)
     const scene = new OfficeScene()
     if (inActivity) {
         el('logout').hidden = true
@@ -120,7 +113,7 @@ function office(user: Identity, mock: boolean) {
     new Phaser.Game({
         type: Phaser.AUTO,
         parent: 'map',
-        backgroundColor: '#09070f',
+        backgroundColor: '#0c1225',
         scene,
         scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
         render: {
@@ -226,7 +219,21 @@ function office(user: Identity, mock: boolean) {
     const customizer = createCharacterCustomizer(send, () => {
         keys.clear()
         closeChat()
+        el<HTMLDialogElement>('people-dialog').close()
+        el<HTMLDialogElement>('settings-dialog').close()
     })
+    const panelOpen = () => Boolean(document.querySelector('dialog[open]'))
+    const openPanel = (id: string) => {
+        keys.clear()
+        closeChat()
+        el<HTMLDialogElement>(id).showModal()
+    }
+    el('people-open').onclick = () => openPanel('people-dialog')
+    el('people-close').onclick = () => el<HTMLDialogElement>('people-dialog').close()
+    el('settings-open').onclick = () => openPanel('settings-dialog')
+    el('settings-close').onclick = () => el<HTMLDialogElement>('settings-dialog').close()
+    el('customize-character').onclick = () => customizer.show()
+    el('customize-pencil').onclick = () => customizer.show()
     function renderRoster(force = false) {
         if (!snapshot) {
             return
@@ -245,6 +252,14 @@ function office(user: Identity, mock: boolean) {
         const scroll = roster.scrollTop
         roster.replaceChildren()
         el('total').textContent = String(snapshot.members.length)
+        el('people-count').textContent = String(snapshot.members.length)
+        const own = snapshot.members.find((member) => member.id === selfId)
+        const portrait = el<HTMLImageElement>('self-portrait')
+        const portraitUrl = characterImage(own?.character) || own?.avatar || '/avatars/avatar-default.svg'
+        if (portrait.getAttribute('src') !== portraitUrl) portrait.src = portraitUrl
+        portrait.onerror = () => { portrait.onerror = null; portrait.src = '/avatars/avatar-default.svg' }
+        el<HTMLButtonElement>('customize-character').disabled = !own
+        el<HTMLButtonElement>('customize-pencil').disabled = !own
         el('roster-subtitle').textContent = `${snapshot.members.length} members across 9 rooms`
         let results = 0
         for (const room of rooms) {
@@ -304,7 +319,10 @@ function office(user: Identity, mock: boolean) {
                 text.type = 'button'
                 text.className = 'member-info'
                 text.setAttribute('aria-label', `Find ${member.username} on the map`)
-                text.onclick = () => scene.focus(member.id)
+                text.onclick = () => {
+                    scene.focus(member.id)
+                    el<HTMLDialogElement>('people-dialog').close()
+                }
                 const top = document.createElement('div')
                 top.className = 'member-topline'
                 const username = document.createElement('span')
@@ -413,10 +431,17 @@ function office(user: Identity, mock: boolean) {
     el('zoom-in').onclick = () => scene.zoom(0.2)
     el('zoom-out').onclick = () => scene.zoom(-0.2)
     el('focus-self').onclick = () => scene.focus(selfId)
-    el('expand').onclick = () => {
-        const full = document.querySelector('.map-shell')!.classList.toggle('expanded')
-        el('expand').textContent = full ? 'Close view' : 'Expand'
+    el('expand').onclick = async () => {
+        try {
+            if (document.fullscreenElement) await document.exitFullscreen()
+            else await document.documentElement.requestFullscreen()
+        } catch {
+            el('expand').textContent = 'Fullscreen unavailable here'
+        }
     }
+    document.addEventListener('fullscreenchange', () => {
+        el('expand').textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Enter fullscreen'
+    })
     el('bubbles').onclick = () => {
         localBubbles = !localBubbles
         localStorage.setItem('office-bubbles', localBubbles ? 'on' : 'off')
@@ -425,7 +450,10 @@ function office(user: Identity, mock: boolean) {
         }
         bubbleControl()
     }
-    el('help').onclick = () => el<HTMLDialogElement>('help-dialog').showModal()
+    el('help').onclick = () => {
+        el<HTMLDialogElement>('settings-dialog').close()
+        openPanel('help-dialog')
+    }
     el('close-help').onclick = () => el<HTMLDialogElement>('help-dialog').close()
     el('logout').onclick = async () => {
         const button = el<HTMLButtonElement>('logout')
@@ -454,7 +482,7 @@ function office(user: Identity, mock: boolean) {
         button.onclick = () => send({ type: 'emote', index: Number(button.dataset.index) })
     })
     eventBus.onEvent('office:move', ({ x, y }) => {
-        if (!chatVisible && !customizer.open && !discordControlled()) {
+        if (!chatVisible && !panelOpen() && !discordControlled()) {
             keys.clear()
             send({ type: 'move_to', x, y })
         }
@@ -470,11 +498,9 @@ function office(user: Identity, mock: boolean) {
         const typing = ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable
         const key = event.key.toLowerCase()
         const moveKey = movementKey(event)
-        if (customizer.open) return
+        if (panelOpen()) return
         if (key === 'escape') {
             closeChat()
-            document.querySelector('.map-shell')!.classList.remove('expanded')
-            el('expand').textContent = 'Expand'
             return
         }
         const activatingControl = Boolean(target.closest('button, a')) && (key === 'enter' || key === ' ')
@@ -595,7 +621,7 @@ function office(user: Identity, mock: boolean) {
             bubbleControl()
             const automatic = discordControlled()
             const linked = snapshot.discord?.state === 'connected'
-            el('mode').textContent = mock ? 'Demo office' : linked ? 'Discord live' : 'Live office'
+            el('mode').textContent = mock ? 'Demo world' : linked ? 'Discord live' : 'Live world'
             el('office-description').textContent = linked
                 ? 'Walk freely. Discord activity brings you to your people.'
                 : 'Your character. Your pace. Make yourself at home.'

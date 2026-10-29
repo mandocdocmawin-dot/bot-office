@@ -4,7 +4,8 @@ import { AvatarTextureManager } from './avatar-manager'
 import { robotStyle } from './character-styles'
 import { eventBus } from './events'
 import { colorCSS, doors, rooms } from './rooms'
-import { Furnishing, WORLD_HEIGHT, WORLD_WIDTH, corners, polygon, project, slab, unproject } from './isometric'
+import { Furnishing, corners, polygon, project, slab, unproject } from './isometric'
+import { fitWorldViewport } from './viewport-fit'
 
 interface Character {
     root: Phaser.GameObjects.Container
@@ -30,6 +31,7 @@ export class OfficeScene extends Phaser.Scene {
     onFrame: () => void = () => {}
     private people = new Map<string, Character>()
     private counts = new Map<Room, Phaser.GameObjects.Text>()
+    private roomLabels = new Map<Room, Phaser.GameObjects.Text>()
     private pending?: Snapshot
     private built = false
     private fitZoom = 1
@@ -63,8 +65,8 @@ export class OfficeScene extends Phaser.Scene {
             const { x, y, w, h, color, name } = room
             const g = this.add.graphics().setDepth(1)
             polygon(g, corners(x, y, w, h), 0x17_17_22)
-            polygon(g, corners(x, y, w, h), color, 0.1)
-            polygon(g, corners(x + 30, y + 50, w - 60, h - 85), color, name === 'Commons' ? 0.24 : 0.1)
+            polygon(g, corners(x, y, w, h), color, 0.16)
+            polygon(g, corners(x + 30, y + 50, w - 60, h - 85), color, name === 'Commons' ? 0.3 : 0.16)
             g.lineStyle(1, 0xff_ff_ff, 0.025)
             for (let line = 35; line < w; line += 32) {
                 const a = project(x + line, y + 5)
@@ -90,6 +92,7 @@ export class OfficeScene extends Phaser.Scene {
                 })
                 .setOrigin(0, 1)
                 .setDepth(3000)
+            this.roomLabels.set(name, title)
             this.counts.set(
                 name,
                 this.add
@@ -338,9 +341,10 @@ export class OfficeScene extends Phaser.Scene {
         this.autoFit = true
         this.viewportWidth = this.scale.width
         this.viewportHeight = this.scale.height
-        this.fitZoom = Math.min(this.scale.width / WORLD_WIDTH, this.scale.height / WORLD_HEIGHT) * 0.96
+        const fitted = fitWorldViewport(this.scale.width, this.scale.height)
+        this.fitZoom = fitted.zoom
         this.zoomFactor = 1
-        this.cameras.main.setZoom(this.fitZoom).centerOn(WORLD_WIDTH / 2 - 25, WORLD_HEIGHT / 2 - 12)
+        this.cameras.main.setZoom(this.fitZoom).centerOn(fitted.centerX, fitted.centerY)
         this.reportZoom()
         this.cameras.main.stopFollow()
     }
@@ -356,7 +360,7 @@ export class OfficeScene extends Phaser.Scene {
         const center = { x: camera.midPoint.x, y: camera.midPoint.y }
         this.viewportWidth = this.scale.width
         this.viewportHeight = this.scale.height
-        this.fitZoom = Math.min(this.scale.width / WORLD_WIDTH, this.scale.height / WORLD_HEIGHT) * 0.96
+        this.fitZoom = fitWorldViewport(this.scale.width, this.scale.height).zoom
         camera.setZoom(this.fitZoom * this.zoomFactor).centerOn(center.x, center.y)
         this.reportZoom()
     }
@@ -378,6 +382,12 @@ export class OfficeScene extends Phaser.Scene {
         this.reportZoom()
     }
     private reportZoom() {
+        // Room names remain readable when the entire world is fitted to the viewport.
+        const labelScale = Math.max(1, (this.scale.width <= 480 ? 0.42 : 0.6) / this.cameras.main.zoom)
+        for (const [room, label] of this.roomLabels) {
+            label.setScale(labelScale)
+            this.counts.get(room)?.setScale(labelScale).setX(label.x + label.displayWidth + 8).setVisible(this.scale.width > 480)
+        }
         const zoom = Math.round(this.zoomFactor * 100)
         eventBus.emitEvent('office:zoom', { zoom })
         window.dispatchEvent(new CustomEvent('office-zoom', { detail: zoom }))

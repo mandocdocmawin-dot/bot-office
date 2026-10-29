@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vite-plus/test'
 import { KeyboardMovement, movementDirection, movementKey } from '../../web/src/keyboard-movement'
 import type { Point } from '@office/shared/protocol'
+import { PROJECTION_X, PROJECTION_Y } from '@office/shared/math'
 
 describe('keyboard-movement', () => {
     test('press, turn and release dispatch immediately without waiting for a heartbeat', () => {
@@ -53,8 +54,8 @@ describe('keyboard-movement', () => {
         ] as [string[], number, number][]) {
             const { x, y } = movementDirection(new Set(keys))
             expect(Math.abs(Math.hypot(x, y) - 1)).toBeLessThan(1e-12)
-            const screenX = 0.86 * (x - y)
-            const screenY = 0.43 * (x + y)
+            const screenX = PROJECTION_X * (x - y)
+            const screenY = PROJECTION_Y * (x + y)
             expect(Math.abs(screenX * sy - screenY * sx)).toBeLessThan(1e-12)
             expect(screenX * sx + screenY * sy).toBeGreaterThan(0)
         }

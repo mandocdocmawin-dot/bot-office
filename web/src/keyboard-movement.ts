@@ -1,4 +1,5 @@
 import type { Point } from '@office/shared/protocol'
+import { PROJECTION_X, PROJECTION_Y } from '@office/shared/math'
 
 const codes: Record<string, string> = {
     KeyW: 'w',
@@ -24,8 +25,8 @@ export function movementDirection(keys: ReadonlySet<string>): Point {
     const sy = Number(keys.has('s') || keys.has('arrowdown')) - Number(keys.has('w') || keys.has('arrowup'))
     // Invert the map's projection before normalizing world speed. A screen
     // diagonal then follows the keys at 45 degrees instead of drifting sideways.
-    const dx = sx / 0.86 + sy / 0.43
-    const dy = sy / 0.43 - sx / 0.86
+    const dx = sx / PROJECTION_X + sy / PROJECTION_Y
+    const dy = sy / PROJECTION_Y - sx / PROJECTION_X
     const length = Math.hypot(dx, dy)
     return length ? { x: dx / length, y: dy / length } : { x: 0, y: 0 }
 }

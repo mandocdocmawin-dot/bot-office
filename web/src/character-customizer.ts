@@ -69,7 +69,7 @@ export function createCharacterCustomizer(send: (packet: ClientPacket) => boolea
     dialog.querySelector<HTMLButtonElement>('[data-action="cancel"]')!.onclick = close
     dialog.addEventListener('cancel', (event) => { if (pending) event.preventDefault() })
     dialog.addEventListener('close', () => {
-        document.querySelector<HTMLButtonElement>('.customize-self')?.focus()
+        document.querySelector<HTMLButtonElement>('#customize-character')?.focus()
     })
     save.onclick = () => {
         if (!self || !ready) {
