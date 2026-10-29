@@ -2,7 +2,7 @@ import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
 import { ChannelType, cleanContent } from 'discord.js'
 import type { TextChannel } from 'discord.js'
-import { extractMediaContent, changedMessagePreview } from './discord-message.js'
+import { changedMessagePreview, extractMediaContent } from './discord-message.js'
 import { loadConfig } from './config.js'
 import { Office } from './office.js'
 
@@ -94,13 +94,13 @@ test('signed Discord GIF URLs remain intact through the office preview instead o
     const bubbles: string[] = []
     const office = new Office(loadConfig(), 'multiplayer', (_id, _room, text) => bubbles.push(text))
     office.upsertDiscord({ id: 'author', username: 'mawin', avatar: null }, 'online')
-    const image = 'https://cdn.discordapp.com/attachments/123/456/hello.gif?signature=' + 'a'.repeat(600)
+    const image = `https://cdn.discordapp.com/attachments/123/456/hello.gif?signature=${'a'.repeat(600)}`
     office.discordMessage('author', 'Commons', image)
     assert.equal(bubbles[0], image)
     office.discordMessage(
         'author',
         'Commons',
-        'https://cdn.discordapp.com/attachments/123/456/hello.gif?signature=' + 'a'.repeat(2000)
+        `https://cdn.discordapp.com/attachments/123/456/hello.gif?signature=${'a'.repeat(2000)}`
     )
     assert.equal(bubbles.length, 1)
 })

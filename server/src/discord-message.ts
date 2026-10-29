@@ -26,13 +26,16 @@ export function extractMediaContent(message: PreviewMessage): string | undefined
         embed.thumbnail?.proxyURL
     ])
     const validImages = images.filter(
-        (url): url is string => !!url && !!mediaProviderUrl(url) && /\.(gif|webp|png|jpe?g)(?:\?|$)/i.test(url)
+        (url): url is string =>
+            typeof url === 'string' && Boolean(mediaProviderUrl(url)) && /\.(gif|webp|png|jpe?g)(?:\?|$)/i.test(url)
     )
     const directImage = validImages.find((url) => /\.gif(?:\?|$)/i.test(url)) ?? validImages[0]
     if (message.content?.trim()) {
         // Prefer Discord's already-resolved image over fetching a share page
         // again. The embed often arrives in a later MessageUpdate event.
-        if (isMediaUrl(message.content.trim()) && directImage) return directImage
+        if (isMediaUrl(message.content.trim()) && directImage) {
+            return directImage
+        }
         // discord.js resolves user, nickname, role and channel mentions using
         // the guild cache. Clean before the office truncates the preview.
         return message.cleanContent ?? message.content

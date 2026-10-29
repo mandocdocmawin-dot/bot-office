@@ -81,6 +81,23 @@ test('input expires, elapsed time is capped, wall collision blocks tunnelling', 
     const blocked = office.world.step({ x: 940, y: 110 }, 500, 0)
     assert.ok(blocked.x <= 952)
 })
+test('movement tolerates a delayed heartbeat but stops after expiry or key release', () => {
+    const { office, advance } = fixture()
+    const player = office.members.get('1')!
+    office.input('1', { type: 'input', dx: 1, dy: 0 })
+    advance(300)
+    assert.equal(player.moving, true)
+    const afterDelay = { x: player.x, y: player.y }
+    advance(150)
+    assert.equal(player.moving, false)
+    assert.deepEqual({ x: player.x, y: player.y }, afterDelay)
+    office.input('1', { type: 'input', dx: 1, dy: 0 })
+    office.input('1', { type: 'input', dx: 0, dy: 0 })
+    advance(50)
+    assert.equal(player.moving, false)
+    assert.deepEqual({ x: player.x, y: player.y }, afterDelay)
+})
+
 test('doors connect every room; server routes clicks around walls and obstacles', () => {
     const { office } = fixture()
     const target = office.world.spawn('Commons')

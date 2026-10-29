@@ -132,8 +132,9 @@ function office(user: Identity, mock: boolean) {
         },
         fps: {
             target: 60,
-            smoothStep: true
+            smoothStep: false
         },
+        autoFocus: false,
         dom: {
             createContainer: true
         },
@@ -154,6 +155,34 @@ function office(user: Identity, mock: boolean) {
     const activitySignal = createActivitySignal(() => send({ type: 'wake' }))
     const activitySpeaking = new ActivitySpeaking()
     let activityVoice = false
+    function setRosterSpeaking(member: Snapshot['members'][number]) {
+        const row = el('roster').querySelector<HTMLElement>(`[data-member-id="${CSS.escape(member.id)}"]`)
+        if (row) {
+            row.querySelector('.member-avatar')?.classList.toggle('speaking-avatar', Boolean(member.speaking))
+            const state = row.querySelector<HTMLElement>('.member-state')
+            if (state) {
+                renderMemberState(state, member)
+            }
+        }
+    }
+    function renderMemberState(state: HTMLElement, member: Snapshot['members'][number]) {
+        state.classList.toggle('speaking', Boolean(member.speaking))
+        if (member.speaking) {
+            const wave = document.createElement('span')
+            wave.className = 'speaking-wave'
+            wave.setAttribute('aria-hidden', 'true')
+            for (let i = 0; i < 3; i++) wave.append(document.createElement('span'))
+            state.replaceChildren(wave, document.createTextNode(` Speaking in ${member.voiceChannelName ?? 'voice'}`))
+        } else if (member.inVoice) {
+            state.textContent = `${member.muted ? 'Muted' : 'Connected'} · ${member.voiceChannelName ?? 'voice'}`
+        } else if (member.sleeping) {
+            state.textContent = 'Napping in office'
+        } else if (member.presence && member.presence !== 'offline') {
+            state.textContent = `${member.presence} on Discord`
+        } else {
+            state.textContent = 'Quiet at desk'
+        }
+    }
     if (inActivity && !mock) {
         void watchActivitySpeaking((id, active, channelId) => {
             if (stopped) {
@@ -161,9 +190,13 @@ function office(user: Identity, mock: boolean) {
             }
             activitySpeaking.set(id, active, channelId)
             if (serverSnapshot && socket?.readyState === WebSocket.OPEN) {
-                snapshot = { ...serverSnapshot, members: activitySpeaking.apply(serverSnapshot.members) }
-                scene.sync(snapshot)
-                renderRoster()
+                const members = activitySpeaking.apply(serverSnapshot.members)
+                snapshot = { ...serverSnapshot, members }
+                const member = members.find((member) => member.id === id)
+                if (member) {
+                    scene.setSpeaking(id, Boolean(member.speaking))
+                    setRosterSpeaking(member)
+                }
             }
         })
             .then((cleanup) => {
@@ -250,6 +283,7 @@ function office(user: Identity, mock: boolean) {
                 results++
                 const row = document.createElement('div')
                 row.className = 'member-row'
+                row.dataset.memberId = member.id
                 if (member.id === selfId) {
                     row.classList.add('is-self')
                 }
@@ -285,18 +319,7 @@ function office(user: Identity, mock: boolean) {
                 }
                 const state = document.createElement('div')
                 state.className = 'member-state'
-                if (member.speaking) {
-                    state.classList.add('speaking')
-                    state.innerHTML = `<span class="speaking-wave" aria-hidden="true"><span></span><span></span><span></span></span> Speaking in ${member.voiceChannelName ?? 'voice'}`
-                } else if (member.inVoice) {
-                    state.textContent = `${member.muted ? 'Muted' : 'Connected'} · ${member.voiceChannelName ?? 'voice'}`
-                } else if (member.sleeping) {
-                    state.textContent = 'Napping in office'
-                } else if (member.presence && member.presence !== 'offline') {
-                    state.textContent = `${member.presence} on Discord`
-                } else {
-                    state.textContent = 'Quiet at desk'
-                }
+                renderMemberState(state, member)
                 text.append(top, state)
                 if (member.id === selfId) {
                     const customize = document.createElement('button')
@@ -498,7 +521,16 @@ function office(user: Identity, mock: boolean) {
         }
     })
     el('help').addEventListener('click', stopMovement)
-    setInterval(() => keys.heartbeat(), 70)
+    let lastHeartbeat = 0
+    const triggerHeartbeat = () => {
+        const now = performance.now()
+        if (now - lastHeartbeat >= 60) {
+            lastHeartbeat = now
+            keys.heartbeat()
+        }
+    }
+    setInterval(triggerHeartbeat, 70)
+    scene.events.on('update', triggerHeartbeat)
     function connect() {
         if (stopped) {
             return
@@ -547,12 +579,9 @@ function office(user: Identity, mock: boolean) {
             }
             serverSnapshot = packet.state
             if (inActivity) {
-                serverSnapshot = {
-                    ...serverSnapshot,
-                    members: serverSnapshot.members.map((member) => ({
-                        ...member,
-                        avatar: activityAvatar(member.avatar)
-                    }))
+                for (let i = 0; i < serverSnapshot.members.length; i++) {
+                    const m = serverSnapshot.members[i]
+                    m.avatar = activityAvatar(m.avatar)
                 }
             }
             snapshot = { ...serverSnapshot, members: activitySpeaking.apply(serverSnapshot.members) }
@@ -623,7 +652,7 @@ function office(user: Identity, mock: boolean) {
             keys.clear()
             el('connection').classList.remove('connected')
             el('map-notice').hidden = false
-            if ([4000, 4001, 4008, 1008].includes(event.code)) {
+            if ([4000, 4001, 1008].includes(event.code)) {
                 stopped = true
                 el('connection').textContent = 'Disconnected'
                 el('map-notice').textContent =
@@ -631,7 +660,7 @@ function office(user: Identity, mock: boolean) {
                         ? 'This account opened another tab. This tab has stopped. Reload to play here.'
                         : event.code === 4001
                           ? 'Your session ended. Refresh to sign in again.'
-                          : 'Connection closed: invalid or excessive input. Refresh to reconnect.'
+                          : 'Connection closed: invalid input. Refresh to reconnect.'
                 return
             }
             el('connection').textContent = 'Reconnecting'

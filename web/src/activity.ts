@@ -86,10 +86,17 @@ export async function activityLogin(): Promise<Identity> {
     return result.user
 }
 
+const avatarCache = new Map<string, string>()
 export function activityAvatar(avatar: string | null) {
-    return inActivity && avatar?.startsWith('https://cdn.discordapp.com/')
-        ? avatar.replace('https://cdn.discordapp.com/', '/discord-cdn/')
-        : avatar
+    if (!inActivity || !avatar || !avatar.startsWith('https://cdn.discordapp.com/')) {
+        return avatar
+    }
+    let cached = avatarCache.get(avatar)
+    if (!cached) {
+        cached = avatar.replace('https://cdn.discordapp.com/', '/discord-cdn/')
+        avatarCache.set(avatar, cached)
+    }
+    return cached
 }
 
 export async function watchActivitySpeaking(onSpeaking: (id: string, active: boolean, channelId: string) => void) {

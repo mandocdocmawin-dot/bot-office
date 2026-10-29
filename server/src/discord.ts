@@ -4,7 +4,7 @@ import type { Office } from './office.js'
 import { channelKey, textRoom, voiceRoom } from './discord-routing.js'
 import type { Member } from './protocol.js'
 import { SpeakingIndicator } from './voice.js'
-import { extractMediaContent, changedMessagePreview } from './discord-message.js'
+import { changedMessagePreview, extractMediaContent } from './discord-message.js'
 
 const presence = (status?: string): NonNullable<Member['presence']> =>
     status === 'online' || status === 'idle' || status === 'dnd' ? status : 'offline'
