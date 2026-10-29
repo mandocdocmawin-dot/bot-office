@@ -13,12 +13,16 @@ import { startMock } from './mock.js'
 import { GameLoop } from './loop.js'
 import { isMediaUrl, loadMediaImage, mediaProviderUrl, resolveMediaUrl } from './media.js'
 import type { ClientPacket, Member, Packet } from './protocol.js'
+import { isCharacterStyle } from './protocol.js'
 
 export function parsePacket(raw: string): ClientPacket | undefined {
     try {
         const p = JSON.parse(raw)
         if (!p || typeof p !== 'object') {
             return
+        }
+        if (p.type === 'character' && isCharacterStyle(p.style)) {
+            return { type: 'character', style: p.style }
         }
         if (
             p.type === 'input' &&

@@ -8,6 +8,8 @@ import { ActivitySpeaking } from './speaking'
 import { KeyboardMovement, movementKey } from './keyboard-movement'
 import { createActivitySignal } from './activity-signal'
 import { connectActivity } from './activity-connection'
+import { createCharacterCustomizer } from './character-customizer'
+import { characterImage } from './character-styles'
 import './style.css'
 
 const apiBase = (inActivity ? '' : import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
@@ -184,8 +186,14 @@ function office(user: Identity, mock: boolean) {
     const send = (packet: ClientPacket) => {
         if (socket?.readyState === WebSocket.OPEN && !stopped) {
             socket.send(JSON.stringify(packet))
+            return true
         }
+        return false
     }
+    const customizer = createCharacterCustomizer(send, () => {
+        keys.clear()
+        closeChat()
+    })
     function renderRoster(force = false) {
         if (!snapshot) {
             return
@@ -193,13 +201,14 @@ function office(user: Identity, mock: boolean) {
         let key = ''
         for (let i = 0; i < snapshot.members.length; i++) {
             const m = snapshot.members[i]
-            key += `${m.id}:${m.username}:${m.avatar}:${m.room}:${m.sleeping ? 1 : 0}:${m.presence}:${m.inVoice ? 1 : 0}:${m.voiceChannelName}:${m.muted ? 1 : 0}:${m.speaking ? 1 : 0};`
+            key += `${m.id}:${m.username}:${m.avatar}:${m.character}:${m.room}:${m.sleeping ? 1 : 0}:${m.presence}:${m.inVoice ? 1 : 0}:${m.voiceChannelName}:${m.muted ? 1 : 0}:${m.speaking ? 1 : 0};`
         }
         if (!force && rosterKey === key) {
             return
         }
         rosterKey = key
         const roster = el('roster')
+        const refocusSelf = document.activeElement?.classList.contains('customize-self')
         const scroll = roster.scrollTop
         roster.replaceChildren()
         el('total').textContent = String(snapshot.members.length)
@@ -239,8 +248,7 @@ function office(user: Identity, mock: boolean) {
             }
             for (const member of members) {
                 results++
-                const row = document.createElement('button')
-                row.type = 'button'
+                const row = document.createElement('div')
                 row.className = 'member-row'
                 if (member.id === selfId) {
                     row.classList.add('is-self')
@@ -254,12 +262,15 @@ function office(user: Identity, mock: boolean) {
                     avatar.classList.add('speaking-avatar')
                 }
                 avatar.alt = `${member.username}'s avatar`
-                avatar.src = member.avatar || '/avatars/avatar-default.svg'
+                avatar.src = characterImage(member.character) || member.avatar || '/avatars/avatar-default.svg'
                 avatar.onerror = () => {
                     avatar.src = '/avatars/avatar-default.svg'
                 }
-                const text = document.createElement('div')
+                const text = document.createElement('button')
+                text.type = 'button'
                 text.className = 'member-info'
+                text.setAttribute('aria-label', `Find ${member.username} on the map`)
+                text.onclick = () => scene.focus(member.id)
                 const top = document.createElement('div')
                 top.className = 'member-topline'
                 const username = document.createElement('span')
@@ -287,8 +298,25 @@ function office(user: Identity, mock: boolean) {
                     state.textContent = 'Quiet at desk'
                 }
                 text.append(top, state)
-                row.append(avatar, text)
-                row.onclick = () => scene.focus(member.id)
+                if (member.id === selfId) {
+                    const customize = document.createElement('button')
+                    customize.type = 'button'
+                    customize.className = 'customize-self'
+                    customize.setAttribute('aria-label', 'Customize your character')
+                    customize.title = 'Customize your character'
+                    customize.append(avatar)
+                    customize.onclick = () => customizer.show()
+                    customize.onkeydown = (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            customizer.show()
+                        }
+                    }
+                    row.append(customize, text)
+                } else {
+                    row.append(avatar, text)
+                }
                 section.append(row)
             }
             roster.append(section)
@@ -301,6 +329,9 @@ function office(user: Identity, mock: boolean) {
         }
         el('all-rooms').classList.toggle('filtered', Boolean(selected))
         roster.scrollTop = scroll
+        if (refocusSelf && !customizer.open) {
+            roster.querySelector<HTMLButtonElement>('.customize-self')?.focus({ preventScroll: true })
+        }
     }
     function bubbleControl() {
         const enabled = localBubbles && snapshot?.config.bubbleEnabled !== false
@@ -400,7 +431,7 @@ function office(user: Identity, mock: boolean) {
         button.onclick = () => send({ type: 'emote', index: Number(button.dataset.index) })
     })
     eventBus.onEvent('office:move', ({ x, y }) => {
-        if (!chatVisible && !discordControlled()) {
+        if (!chatVisible && !customizer.open && !discordControlled()) {
             keys.clear()
             send({ type: 'move_to', x, y })
         }
@@ -416,13 +447,15 @@ function office(user: Identity, mock: boolean) {
         const typing = ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable
         const key = event.key.toLowerCase()
         const moveKey = movementKey(event)
+        if (customizer.open) return
         if (key === 'escape') {
             closeChat()
             document.querySelector('.map-shell')!.classList.remove('expanded')
             el('expand').textContent = 'Expand'
             return
         }
-        if (typing || el<HTMLDialogElement>('help-dialog').open || event.ctrlKey || event.metaKey || event.altKey) {
+        const activatingControl = Boolean(target.closest('button, a')) && (key === 'enter' || key === ' ')
+        if (typing || activatingControl || el<HTMLDialogElement>('help-dialog').open || event.ctrlKey || event.metaKey || event.altKey) {
             return
         }
         if (discordControlled()) {
@@ -527,6 +560,7 @@ function office(user: Identity, mock: boolean) {
                 selfId = packet.selfId
                 scene.setSelf(selfId)
             }
+            customizer.update(snapshot.members.find((m) => m.id === selfId), packet.type === 'snapshot')
             scene.sync(snapshot)
             renderRoster()
             bubbleControl()
@@ -572,6 +606,7 @@ function office(user: Identity, mock: boolean) {
                 : 'Live · 20 updates / second'
         }
         socket.onclose = (event) => {
+            customizer.disconnected()
             console.warn('[office] websocket_closed', { code: event.code, clean: event.wasClean, activity: inActivity })
             activitySpeaking.clear()
             serverSnapshot = undefined

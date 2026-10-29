@@ -36,6 +36,7 @@ export interface Identity {
 }
 
 export interface Member extends Identity, Point {
+    character?: CharacterStyle
     room: Room
     sleeping: boolean
     moving: boolean
@@ -78,11 +79,18 @@ export interface Snapshot {
 }
 
 export type ClientPacket =
+    | { type: 'character'; style: CharacterStyle }
     | { type: 'input'; dx: number; dy: number }
     | { type: 'move_to'; x: number; y: number }
     | { type: 'chat'; text: string }
     | { type: 'emote'; index: number }
     | { type: 'wake' }
+
+export const CHARACTER_STYLES = ['default', 'blue', 'pink', 'mint', 'orange', 'lavender'] as const
+export type CharacterStyle = (typeof CHARACTER_STYLES)[number]
+export function isCharacterStyle(value: unknown): value is CharacterStyle {
+    return typeof value === 'string' && (CHARACTER_STYLES as readonly string[]).includes(value)
+}
 
 export type Packet =
     | { type: 'snapshot'; selfId: string; state: Snapshot; at: number }
