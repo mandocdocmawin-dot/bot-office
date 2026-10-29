@@ -212,6 +212,8 @@ p {
     color: #d3d6ff;
 }
 #map {
+    position: relative;
+    overflow: hidden;
     height: calc(100dvh - 310px);
     min-height: 500px;
     max-height: 1100px;

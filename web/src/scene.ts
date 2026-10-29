@@ -10,7 +10,7 @@ interface Character {
     body: Phaser.GameObjects.Container
     name: Phaser.GameObjects.Text
     status: Phaser.GameObjects.Arc
-    bubble?: Phaser.GameObjects.Container
+    bubble?: Phaser.GameObjects.Container | Phaser.GameObjects.DOMElement
     zzz: Phaser.GameObjects.Text
     member: Member
     walkPhase: number
@@ -417,7 +417,7 @@ export class OfficeScene extends Phaser.Scene {
     }
     private makeCharacter(m: Member, x: number, y: number): Character {
         const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
-        const shirt = [0x77_cc_bb, 0xb296dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xaba6ed][seed % 6]
+        const shirt = [0x77_cc_bb, 0xb296dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
         const root = this.add.container(x, y)
         const shadow = this.add.ellipse(0, 0, 33, 14, 0x02_03_08, 0.5)
         const body = this.add.container(0, 0)
@@ -472,7 +472,7 @@ export class OfficeScene extends Phaser.Scene {
             .setVisible(false)
         const talkBars = [0, 1, 2].map((i) => this.add.rectangle(-8 + i * 8, 0, 4, 15, 0x8cf0b5).setOrigin(0.5, 1))
         const talk = this.add
-            .container(0, -77, [this.add.rectangle(0, -7, 35, 24, 0x142d25).setStrokeStyle(1, 0x529f77), ...talkBars])
+            .container(0, -77, [this.add.rectangle(0, -7, 35, 24, 0x142d25).setStrokeStyle(1, 0x52_9f_77), ...talkBars])
             .setVisible(false)
         body.add([voiceRing, ...legs, arms[0], person, arms[1], head, initial, status])
         root.add([shadow, body, name, zzz, voiceName, talk])
@@ -516,6 +516,42 @@ export class OfficeScene extends Phaser.Scene {
             return
         }
         c.bubble?.destroy()
+        c.bubble = undefined
+
+        if (this.isMediaUrl(content)) {
+            this.createMediaBubble(c, content.trim(), duration)
+            return
+        }
+        this.createTextBubble(c, content, duration)
+    }
+
+    private isMediaUrl(text: string): boolean {
+        const trimmed = text.trim()
+        if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+            return false
+        }
+        if (/\.(gif|webp|png|jpe?g)(\?.*)?$/i.test(trimmed)) {
+            return true
+        }
+        if (/klipy\.com\/(gifs|stickers)\//i.test(trimmed)) {
+            return true
+        }
+        if (/giphy\.com\/gifs\//i.test(trimmed)) {
+            return true
+        }
+        if (/tenor\.com\/view\//i.test(trimmed)) {
+            return true
+        }
+        if (/(static|media)[0-9]*\.(klipy|giphy|tenor)\.com\//i.test(trimmed)) {
+            return true
+        }
+        if (/cdn\.discordapp\.com\/attachments\//i.test(trimmed)) {
+            return true
+        }
+        return false
+    }
+
+    private createTextBubble(c: Character, content: string, duration: number) {
         const text = this.add
             .text(0, 0, content, {
                 fontFamily: 'Arial',
@@ -537,6 +573,72 @@ export class OfficeScene extends Phaser.Scene {
         this.time.delayedCall(duration, () => {
             if (c.bubble === bubble) {
                 bubble.destroy()
+                c.bubble = undefined
+            }
+        })
+    }
+
+    private createMediaBubble(c: Character, url: string, duration: number) {
+        const wrap = document.createElement('div')
+        wrap.className = 'chat-bubble-media'
+        wrap.style.cssText =
+            'pointer-events:none;display:inline-flex;flex-direction:column;align-items:center;line-height:0;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.45));'
+
+        const box = document.createElement('div')
+        box.style.cssText =
+            'background:#eee8fa;padding:4px;border-radius:8px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'
+
+        const img = document.createElement('img')
+        img.alt = 'Chat media'
+        img.style.cssText =
+            'max-width:140px;max-height:120px;min-width:32px;min-height:32px;border-radius:6px;display:block;object-fit:contain;'
+
+        const arrow = document.createElement('div')
+        arrow.style.cssText =
+            'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid #eee8fa;margin-top:-1px;'
+
+        box.append(img)
+        wrap.append(box)
+        wrap.append(arrow)
+
+        const isDirect = /\.(gif|webp|png|jpe?g)(\?.*)?$/i.test(url) || /(static|media)[0-9]*\./i.test(url)
+        if (isDirect) {
+            img.src = url
+        } else {
+            fetch(`/api/media/resolve?url=${encodeURIComponent(url)}`)
+                .then((r) => r.json())
+                .then((data: { url?: string }) => {
+                    if (data?.url && c.bubble === dom) {
+                        img.src = data.url
+                    }
+                })
+                .catch(() => {
+                    if (c.bubble === dom) {
+                        img.src = url
+                    }
+                })
+        }
+
+        const dom = this.add.dom(0, -68, wrap).setOrigin(0.5, 1)
+        dom.pointerEvents = 'none'
+
+        img.onload = () => {
+            if (c.bubble === dom) {
+                dom.updateSize()
+            }
+        }
+        img.onerror = () => {
+            if (c.bubble === dom) {
+                dom.destroy()
+                c.bubble = undefined
+            }
+        }
+
+        c.root.add(dom)
+        c.bubble = dom
+        this.time.delayedCall(duration, () => {
+            if (c.bubble === dom) {
+                dom.destroy()
                 c.bubble = undefined
             }
         })

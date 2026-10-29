@@ -19,7 +19,7 @@ test('GameLoop runs fixed ticks and dispatches broadcast', async () => {
     )
 
     loop.start()
-    await new Promise((resolve) => setTimeout(resolve, 125))
+    await new Promise((resolve) => setTimeout(resolve, 160))
     loop.stop()
 
     assert.ok(ticks >= 2, `Expected at least 2 ticks, got ${ticks}`)

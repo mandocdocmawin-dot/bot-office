@@ -182,9 +182,11 @@ export class Office {
             content &&
             (p.presence !== 'offline' || this.config.discord.offline_behavior === 'grey')
         ) {
-            const text = [...content.replaceAll(/[\u0000-\u001F\u007F]/g, ' ').trim()]
-                .slice(0, Math.min(40, this.config.bubble_max_chars))
-                .join('')
+            const trimmed = content.replaceAll(/[\u0000-\u001F\u007F]/g, ' ').trim()
+            const text =
+                trimmed.startsWith('http://') || trimmed.startsWith('https://')
+                    ? trimmed.slice(0, 500)
+                    : [...trimmed].slice(0, Math.min(40, this.config.bubble_max_chars)).join('')
             if (text) {
                 this.bubble(id, p.room, text)
             }
@@ -289,12 +291,16 @@ export class Office {
             }
         } else if ((packet.type === 'chat' || packet.type === 'emote') && this.now() - p.lastChat >= 900) {
             p.lastChat = this.now()
-            const text =
-                packet.type === 'emote'
-                    ? EMOTES[packet.index]
-                    : [...packet.text.replaceAll(/[\u0000-\u001F\u007F]/g, ' ').trim()]
-                          .slice(0, this.config.bubble_max_chars)
-                          .join('')
+            let text = ''
+            if (packet.type === 'emote') {
+                text = EMOTES[packet.index]
+            } else {
+                const trimmed = packet.text.replaceAll(/[\u0000-\u001F\u007F]/g, ' ').trim()
+                text =
+                    trimmed.startsWith('http://') || trimmed.startsWith('https://')
+                        ? trimmed.slice(0, 500)
+                        : [...trimmed].slice(0, this.config.bubble_max_chars).join('')
+            }
             if (text && this.config.bubble_enabled) {
                 this.bubble(id, p.room, text)
             }

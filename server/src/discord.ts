@@ -7,6 +7,30 @@ import { SpeakingIndicator } from './voice.js'
 
 const presence = (status?: string): NonNullable<Member['presence']> =>
     status === 'online' || status === 'idle' || status === 'dnd' ? status : 'offline'
+function extractMediaContent(message: {
+    content?: string | null
+    attachments?: { first?: () => { url: string } | undefined }
+    embeds?: Array<{
+        image?: { url?: string | null } | null
+        thumbnail?: { url?: string | null } | null
+        video?: { url?: string | null } | null
+        url?: string | null
+    }>
+}): string | undefined {
+    if (message.content && message.content.trim()) {
+        return message.content
+    }
+    const attachmentUrl = message.attachments?.first?.()?.url
+    if (attachmentUrl) {
+        return attachmentUrl
+    }
+    const embed = message.embeds?.[0]
+    if (embed) {
+        return embed.image?.url || embed.thumbnail?.url || embed.video?.url || embed.url || undefined
+    }
+    return undefined
+}
+
 export function startDiscord(
     office: Office,
     token: string | undefined,
@@ -127,8 +151,30 @@ export function startDiscord(
                 { id: message.channelId, name: 'name' in message.channel ? message.channel.name : '' },
                 parent
             ),
-            settings.message_previews ? message.content : undefined
+            settings.message_previews ? extractMediaContent(message) : undefined
         )
+    })
+    client.on(Events.MessageUpdate, (oldMessage, newMessage) => {
+        if (newMessage.guildId !== guildId || newMessage.author?.bot) {
+            return
+        }
+        const oldContent = extractMediaContent(oldMessage as any)
+        const newContent = extractMediaContent(newMessage as any)
+        if (newContent && newContent !== oldContent && (!oldContent || !oldContent.startsWith('http'))) {
+            if (newMessage.member) {
+                upsert(newMessage.member)
+            }
+            const parent = newMessage.channel.isThread() ? newMessage.channel.parent : null
+            office.discordMessage(
+                newMessage.author!.id,
+                textRoom(
+                    office.config,
+                    { id: newMessage.channelId, name: 'name' in newMessage.channel ? newMessage.channel.name : '' },
+                    parent
+                ),
+                settings.message_previews ? newContent : undefined
+            )
+        }
     })
     client.on(Events.ThreadCreate, async (thread, newlyCreated) => {
         if (thread.guildId !== guildId || !newlyCreated || !thread.ownerId) {

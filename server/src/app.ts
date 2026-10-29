@@ -9,6 +9,7 @@ import { ROOT } from './config.js'
 import type { Config } from './config.js'
 import { startMock } from './mock.js'
 import { GameLoop } from './loop.js'
+import { isMediaUrl, resolveMediaUrl } from './media.js'
 import type { ClientPacket, Member, Packet } from './protocol.js'
 
 export function parsePacket(raw: string): ClientPacket | undefined {
@@ -77,14 +78,18 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
         }
     }
     const auth = new Auth(options, request)
-    const office = new Office(config, options.mock ? 'mock' : 'multiplayer', (id, room, text) => {
+    const office = new Office(config, options.mock ? 'mock' : 'multiplayer', async (id, room, text) => {
+        let broadcastText = text
+        if (isMediaUrl(text)) {
+            broadcastText = await resolveMediaUrl(text)
+        }
         for (const [playerId, socket] of connections) {
             if (office.members.get(playerId)?.room === room) {
                 send(socket, {
                     type: 'bubble',
                     memberId: id,
                     room,
-                    text,
+                    text: broadcastText,
                     duration: config.bubble_duration_ms
                 })
             }
@@ -117,6 +122,18 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                         voiceMonitor: office.voiceMonitor
                     })
                 )
+                return
+            }
+            if (url.pathname === '/api/media/resolve') {
+                const target = url.searchParams.get('url')
+                if (!target) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Missing url parameter' }))
+                    return
+                }
+                const resolved = await resolveMediaUrl(target)
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ url: resolved }))
                 return
             }
             if (await auth.handle(req, res, url)) {
