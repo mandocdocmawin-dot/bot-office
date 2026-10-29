@@ -1,4 +1,4 @@
-import { test, expect } from 'vite-plus/test'
+import { expect, test } from 'vite-plus/test'
 import { createActivitySignal } from '../../web/src/activity-signal'
 
 test('typing a 500-character link and keyboard events share one throttled activity signal', () => {

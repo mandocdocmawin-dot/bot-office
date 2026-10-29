@@ -1,6 +1,6 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
-import { cleanContent, ChannelType } from 'discord.js'
+import { ChannelType, cleanContent } from 'discord.js'
 import type { TextChannel } from 'discord.js'
 import { extractMediaContent } from './discord-message.js'
 import { loadConfig } from './config.js'
@@ -24,7 +24,10 @@ test('Discord user, nickname, role and channel mentions become readable preview 
         assert.equal(preview, '@IMO「イモ」')
     }
     const raw = '<@&903170305643226208> meet in <#903170305643226209>'
-    assert.equal(extractMediaContent({ content: raw, cleanContent: cleanContent(raw, channel) }), '@Study Group meet in #general')
+    assert.equal(
+        extractMediaContent({ content: raw, cleanContent: cleanContent(raw, channel) }),
+        '@Study Group meet in #general'
+    )
 })
 
 test('resolved mention reaches the transient bubble before preview truncation', () => {
@@ -44,7 +47,13 @@ test('plain text, GIF links, attachments and late embeds retain their preview co
     const gif = 'https://giphy.com/gifs/link-the-legend-of-zelda-NVBR6cLvUjV9C'
     assert.equal(extractMediaContent({ content: gif, cleanContent: gif }), gif)
     assert.equal(extractMediaContent({ content: 'hello' }), 'hello')
-    assert.equal(extractMediaContent({ content: null, attachments: { first: () => ({ url: 'https://example.com/a.gif' }) } }), 'https://example.com/a.gif')
-    assert.equal(extractMediaContent({ embeds: [{ image: { url: 'https://example.com/b.gif' } }] }), 'https://example.com/b.gif')
+    assert.equal(
+        extractMediaContent({ content: null, attachments: { first: () => ({ url: 'https://example.com/a.gif' }) } }),
+        'https://example.com/a.gif'
+    )
+    assert.equal(
+        extractMediaContent({ embeds: [{ image: { url: 'https://example.com/b.gif' } }] }),
+        'https://example.com/b.gif'
+    )
     assert.equal(extractMediaContent({}), undefined)
 })

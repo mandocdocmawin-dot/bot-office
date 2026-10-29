@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { WebSocket, WebSocketServer } from 'ws'
 import { Auth } from './auth.js'
 import type { AuthOptions } from './auth.js'
@@ -9,7 +10,7 @@ import { ROOT } from './config.js'
 import type { Config } from './config.js'
 import { startMock } from './mock.js'
 import { GameLoop } from './loop.js'
-import { isMediaUrl, resolveMediaUrl, loadMediaImage, mediaProviderUrl } from './media.js'
+import { isMediaUrl, loadMediaImage, mediaProviderUrl, resolveMediaUrl } from './media.js'
 import type { ClientPacket, Member, Packet } from './protocol.js'
 
 export function parsePacket(raw: string): ClientPacket | undefined {
@@ -105,6 +106,10 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
         connections.get(id)?.close(4001, 'Session ended. Please sign in again.')
     }
     const webRoot = resolve(ROOT, 'web/dist')
+    const staticCache = new Map<
+        string,
+        { body: Buffer; gzip?: Buffer; type: string; etag: string; immutable: boolean }
+    >()
     const mime: Record<string, string> = {
         '.html': 'text/html',
         '.js': 'text/javascript',
@@ -200,9 +205,48 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                 res.end()
                 return
             }
-            const data = await readFile(file)
-            res.writeHead(200, { 'Content-Type': mime[extname(file)] ?? 'application/octet-stream' })
-            res.end(req.method === 'HEAD' ? undefined : data)
+            let cached = staticCache.get(file)
+            if (!cached) {
+                const data = await readFile(file)
+                const type = mime[extname(file)] ?? 'application/octet-stream'
+                const immutable = url.pathname.startsWith('/assets/')
+                let gzip: Buffer | undefined
+                if (
+                    data.length > 256 &&
+                    (type.startsWith('text/') ||
+                        type.includes('javascript') ||
+                        type.includes('json') ||
+                        type.includes('css') ||
+                        type.includes('svg'))
+                ) {
+                    try {
+                        gzip = gzipSync(data, { level: 6 })
+                    } catch {
+                        /* Ignore compression errors and fallback to raw buffer */
+                    }
+                }
+                const etag = `"${data.length.toString(16)}-${data.subarray(0, 16).toString('hex')}"`
+                cached = { body: data, gzip, type, etag, immutable }
+                staticCache.set(file, cached)
+            }
+            if (req.headers['if-none-match'] === cached.etag) {
+                res.writeHead(304)
+                res.end()
+                return
+            }
+            const acceptGzip = Boolean(cached.gzip && req.headers['accept-encoding']?.includes('gzip'))
+            const body = acceptGzip && cached.gzip ? cached.gzip : cached.body
+            const headers: Record<string, string | number> = {
+                'Content-Type': cached.type,
+                'Content-Length': body.length,
+                ETag: cached.etag,
+                'Cache-Control': cached.immutable ? 'public, max-age=31536000, immutable' : 'no-cache'
+            }
+            if (acceptGzip && cached.gzip) {
+                headers['Content-Encoding'] = 'gzip'
+            }
+            res.writeHead(200, headers)
+            res.end(req.method === 'HEAD' ? undefined : body)
         } catch {
             if (!res.headersSent) {
                 res.writeHead(404)
@@ -266,7 +310,9 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                 office.input(user.id, packet)
             })
             ws.on('close', (code) => {
-                if (code !== 1000 && code !== 1005) console.warn('[office] websocket_closed', { code })
+                if (code !== 1000 && code !== 1005) {
+                    console.warn('[office] websocket_closed', { code })
+                }
                 clearInterval(heartbeat)
                 if (connections.get(user.id) !== ws) {
                     return

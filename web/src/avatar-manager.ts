@@ -19,6 +19,9 @@ export class AvatarTextureManager {
 
         const img = new Image()
         img.crossOrigin = 'anonymous'
+        img.onerror = () => {
+            onReady(key)
+        }
         img.onload = () => {
             if (!this.textures.exists(key)) {
                 const texture = this.textures.createCanvas(key, 64, 64)

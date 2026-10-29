@@ -16,6 +16,17 @@ export default defineConfig(({ mode }) => {
                 '/auth': target,
                 '/health': target
             }
+        },
+        build: {
+            rollupOptions: {
+                output: {
+                    manualChunks(id) {
+                        if (id.includes('node_modules/phaser')) {
+                            return 'phaser'
+                        }
+                    }
+                }
+            }
         }
     }
 })

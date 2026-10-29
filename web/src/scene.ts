@@ -22,6 +22,7 @@ interface Character {
     voiceName: Phaser.GameObjects.Text
     legs: [Phaser.GameObjects.Container, Phaser.GameObjects.Container]
     arms: [Phaser.GameObjects.Container, Phaser.GameObjects.Container]
+    depth: number
 }
 export class OfficeScene extends Phaser.Scene {
     private people = new Map<string, Character>()
@@ -254,7 +255,11 @@ export class OfficeScene extends Phaser.Scene {
             c.root.x += (c.targetX - c.root.x) * blend
             c.root.y += (c.targetY - c.root.y) * blend
             const travelled = Math.hypot(c.root.x - previousX, c.root.y - previousY)
-            c.root.setDepth((c.bubble ? 4000 : 1000) + c.root.y)
+            const targetDepth = (c.bubble ? 4000 : 1000) + c.root.y
+            if (c.depth !== targetDepth) {
+                c.root.setDepth(targetDepth)
+                c.depth = targetDepth
+            }
             // Follow the rendered movement, including interpolation after a stop packet.
             // Distance-driven steps stay in sync at different speeds and frame rates.
             const walking = !this.frozen && (c.member.moving || travelled > 0.03)
@@ -419,7 +424,7 @@ export class OfficeScene extends Phaser.Scene {
     private makeCharacter(m: Member, x: number, y: number): Character {
         const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
         const shirt = [0x77_cc_bb, 0xb296dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
-        const root = this.add.container(x, y)
+        const root = this.add.container(x, y).setSize(32, 64)
         const shadow = this.add.ellipse(0, 0, 33, 14, 0x02_03_08, 0.5)
         const body = this.add.container(0, 0)
         const person = this.add.graphics()
@@ -473,7 +478,10 @@ export class OfficeScene extends Phaser.Scene {
             .setVisible(false)
         const talkBars = [0, 1, 2].map((i) => this.add.rectangle(-8 + i * 8, 0, 4, 15, 0x8cf0b5).setOrigin(0.5, 1))
         const talk = this.add
-            .container(0, -77, [this.add.rectangle(0, -7, 35, 24, 0x142d25).setStrokeStyle(1, 0x52_9f_77), ...talkBars])
+            .container(0, -77, [
+                this.add.rectangle(0, -7, 35, 24, 0x14_2d_25).setStrokeStyle(1, 0x52_9f_77),
+                ...talkBars
+            ])
             .setVisible(false)
         body.add([voiceRing, ...legs, arms[0], person, arms[1], head, initial, status])
         root.add([shadow, body, name, zzz, voiceName, talk])
@@ -492,7 +500,8 @@ export class OfficeScene extends Phaser.Scene {
             talkBars,
             voiceName,
             legs,
-            arms
+            arms,
+            depth: 1000 + y
         }
         this.loadAvatar(c, m)
         return c
@@ -613,7 +622,7 @@ export class OfficeScene extends Phaser.Scene {
                 this.createTextBubble(c, 'GIF unavailable', duration)
             }
         }
-        let expiry = this.time.delayedCall(12000, unavailable)
+        let expiry = this.time.delayedCall(12_000, unavailable)
 
         img.onload = () => {
             if (c.bubble === dom) {

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
 import {
-    isMediaUrl,
-    resolveMediaUrl,
-    loadMediaImage,
     fetchMediaResponse,
+    isMediaUrl,
+    loadMediaImage,
     mediaProviderUrl,
-    readMediaBody
+    readMediaBody,
+    resolveMediaUrl
 } from './media.js'
 
 describe('media resolution', () => {
@@ -87,7 +87,7 @@ describe('media resolution', () => {
             .mockResolvedValue(new Response('<html>page</html>', { headers: { 'Content-Type': 'text/html' } }))
         await expect(loadMediaImage('https://media.giphy.com/a.gif', html)).rejects.toThrow('not return an image')
         await expect(
-            readMediaBody(new Response('abc', { headers: { 'Content-Length': '9000000' } }), 8000000)
+            readMediaBody(new Response('abc', { headers: { 'Content-Length': '9000000' } }), 8_000_000)
         ).rejects.toThrow('too large')
         const stream = new ReadableStream({
             start(controller) {

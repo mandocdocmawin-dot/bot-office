@@ -664,12 +664,14 @@ test('long GIF links render as bubbles without closing the socket; oversized cha
     const f = await fixture()
     try {
         const { ws } = await f.socket((await f.login()).cookie)
-        const text = 'https://media.giphy.com/media/NVBR6cLvUjV9C/giphy.gif?test=' + 'a'.repeat(120)
+        const text = `https://media.giphy.com/media/NVBR6cLvUjV9C/giphy.gif?test=${'a'.repeat(120)}`
         const bubble = packet(ws, (p) => p.type === 'bubble')
         ws.send(JSON.stringify({ type: 'chat', text }))
         const received = await bubble
         assert.equal(received.type, 'bubble')
-        if (received.type === 'bubble') assert.equal(received.text, text)
+        if (received.type === 'bubble') {
+            assert.equal(received.text, text)
+        }
         assert.equal(ws.readyState, WebSocket.OPEN)
 
         const error = packet(ws, (p) => p.type === 'error')
@@ -690,7 +692,9 @@ test('the reported Giphy page resolves to an image while the socket keeps receiv
     const page = 'https://giphy.com/gifs/link-the-legend-of-zelda-NVBR6cLvUjV9C'
     const image = 'https://media.giphy.com/media/NVBR6cLvUjV9C/giphy.gif'
     const provider = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-        if (String(input) === page) return Promise.resolve(new Response(`<img src="${image}">`))
+        if (String(input) === page) {
+            return Promise.resolve(new Response(`<img src="${image}">`))
+        }
         return originalFetch(input, init)
     })
     try {
@@ -699,7 +703,9 @@ test('the reported Giphy page resolves to an image while the socket keeps receiv
         ws.send(JSON.stringify({ type: 'chat', text: page }))
         const received = await bubble
         assert.equal(received.type, 'bubble')
-        if (received.type === 'bubble') assert.equal(received.text, image)
+        if (received.type === 'bubble') {
+            assert.equal(received.text, image)
+        }
         await packet(ws, (p) => p.type === 'state')
         assert.equal(ws.readyState, WebSocket.OPEN)
         ws.close()
@@ -717,7 +723,9 @@ test('same-origin image route requires a session, serves GIF bytes and contains 
     let fail = false
     const provider = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
         if (String(input) === image) {
-            if (fail) return Promise.reject(new Error('provider failed'))
+            if (fail) {
+                return Promise.reject(new Error('provider failed'))
+            }
             return Promise.resolve(new Response(gif, { headers: { 'Content-Type': 'image/gif' } }))
         }
         return originalFetch(input, init)
@@ -747,10 +755,16 @@ test('viewers of one GIF share a single in-flight provider download', async () =
     const originalFetch = globalThis.fetch
     const image = 'https://media.giphy.com/media/shared-preview/giphy.gif'
     let release!: () => void
-    const ready = new Promise<void>((resolve) => { release = resolve })
+    const ready = new Promise<void>((resolve) => {
+        release = resolve
+    })
     let downloads = 0
     let arrivals = 0
-    f.app.server.on('request', (req) => { if (req.url?.startsWith('/api/media/image')) arrivals++ })
+    f.app.server.on('request', (req) => {
+        if (req.url?.startsWith('/api/media/image')) {
+            arrivals++
+        }
+    })
     const provider = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
         if (String(input) === image) {
             downloads++
@@ -761,7 +775,11 @@ test('viewers of one GIF share a single in-flight provider download', async () =
     })
     try {
         const session = (await f.login()).cookie
-        const responses = Promise.all(Array.from({ length: 6 }, () => fetch(`${f.base}/api/media/image?url=${encodeURIComponent(image)}`, { headers: { Cookie: session } })))
+        const responses = Promise.all(
+            Array.from({ length: 6 }, () =>
+                fetch(`${f.base}/api/media/image?url=${encodeURIComponent(image)}`, { headers: { Cookie: session } })
+            )
+        )
         await vi.waitFor(() => assert.equal(arrivals, 6))
         assert.equal(downloads, 1)
         release()

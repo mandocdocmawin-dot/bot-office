@@ -17,8 +17,12 @@ export function extractMediaContent(message: PreviewMessage): string | undefined
         return message.cleanContent ?? message.content
     }
     const attachmentUrl = message.attachments?.first?.()?.url
-    if (attachmentUrl) return attachmentUrl
+    if (attachmentUrl) {
+        return attachmentUrl
+    }
     const embed = message.embeds?.[0]
-    if (embed) return embed.image?.url || embed.thumbnail?.url || embed.video?.url || embed.url || undefined
+    if (embed) {
+        return embed.image?.url || embed.thumbnail?.url || embed.video?.url || embed.url || undefined
+    }
     return undefined
 }

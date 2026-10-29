@@ -4,7 +4,9 @@ export function createActivitySignal(send: () => void, now = () => Date.now()) {
     let last = -Infinity
     return () => {
         const time = now()
-        if (time - last < 900) return
+        if (time - last < 900) {
+            return
+        }
         last = time
         send()
     }

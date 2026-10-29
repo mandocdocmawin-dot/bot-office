@@ -115,7 +115,17 @@ function office(user: Identity, mock: boolean) {
         backgroundColor: '#09070f',
         scene,
         scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
-        render: { antialias: true },
+        render: {
+            antialias: true,
+            roundPixels: true,
+            powerPreference: 'high-performance',
+            batchSize: 4096,
+            transparent: false
+        },
+        fps: {
+            target: 60,
+            smoothStep: true
+        },
         dom: {
             createContainer: true
         },
@@ -499,8 +509,9 @@ function office(user: Identity, mock: boolean) {
                 notice.textContent = packet.message
                 notice.hidden = false
                 setTimeout(() => {
-                    if (socket.readyState === WebSocket.OPEN && notice.textContent === packet.message)
+                    if (socket.readyState === WebSocket.OPEN && notice.textContent === packet.message) {
                         notice.hidden = true
+                    }
                 }, 5000)
                 return
             }
