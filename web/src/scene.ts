@@ -48,7 +48,7 @@ export class OfficeScene extends Phaser.Scene {
         this.built = true
         const base = this.add.graphics()
         slab(base, 0, 0, 1400, 1000, -5, 38, 0x17_16_22)
-        polygon(base, corners(18, 18, 1364, 964, -4), 0x201d2a)
+        polygon(base, corners(18, 18, 1364, 964, -4), 0x20_1d_2a)
         for (const door of doors) {
             polygon(base, corners(door.x, door.y, door.w, door.h), 0x49_41_57)
             const p = project(door.x + door.w / 2, door.y + door.h / 2)
@@ -252,10 +252,18 @@ export class OfficeScene extends Phaser.Scene {
                 this.reducedMotion.matches || (own && !c.member.moving) ? 1 : 1 - Math.exp(-delta / (own ? 18 : 55))
             const previousX = c.root.x
             const previousY = c.root.y
-            c.root.x += (c.targetX - c.root.x) * blend
-            c.root.y += (c.targetY - c.root.y) * blend
+            if (Math.abs(c.targetX - c.root.x) < 0.05) {
+                c.root.x = c.targetX
+            } else {
+                c.root.x += (c.targetX - c.root.x) * blend
+            }
+            if (Math.abs(c.targetY - c.root.y) < 0.05) {
+                c.root.y = c.targetY
+            } else {
+                c.root.y += (c.targetY - c.root.y) * blend
+            }
             const travelled = Math.hypot(c.root.x - previousX, c.root.y - previousY)
-            const targetDepth = (c.bubble ? 4000 : 1000) + c.root.y
+            const targetDepth = (c.bubble ? 4000 : 1000) + Math.round(c.root.y)
             if (c.depth !== targetDepth) {
                 c.root.setDepth(targetDepth)
                 c.depth = targetDepth
@@ -384,45 +392,48 @@ export class OfficeScene extends Phaser.Scene {
                 this.people.delete(id)
             }
         }
+        const roomCounts = new Map<string, number>()
+        for (let i = 0; i < state.members.length; i++) {
+            const r = state.members[i].room
+            roomCounts.set(r, (roomCounts.get(r) ?? 0) + 1)
+        }
         for (const room of rooms) {
-            const members = state.members.filter((m) => m.room === room.name).sort((a, b) => a.id.localeCompare(b.id))
-            this.counts.get(room.name)?.setText(String(members.length))
-            members.forEach((m) => {
-                const target = project(m.x, m.y)
-                let c = this.people.get(m.id)
-                if (!c) {
-                    c = this.makeCharacter(m, target.x, target.y)
-                    this.people.set(m.id, c)
-                }
-                // Interpolate authoritative 20 Hz snapshots; never trust browser positions.
-                if (Math.hypot(c.root.x - target.x, c.root.y - target.y) > 250) {
-                    c.root.setPosition(target.x, target.y)
-                }
-                c.targetX = target.x
-                c.targetY = target.y
-                const avatarChanged = c.member.avatar !== m.avatar
-                if (avatarChanged) {
-                    this.avatarManager.release(c.member.id, c.member.avatar)
-                }
-                c.member = m
-                if (avatarChanged) {
-                    this.loadAvatar(c, m)
-                }
-                c.name.setText(this.shortName(m.username) + (m.id === this.selfId ? ' (you)' : ''))
-                c.status.setFillStyle(
-                    m.sleeping ? 0xc1afed : m.presence === 'offline' && !m.inVoice ? 0x9298a7 : 0x7ed7ad
-                )
-                // Invisible Discord presence must not fade the character you control.
-                c.root.setAlpha(m.presence === 'offline' && m.id !== this.selfId && !m.inVoice ? 0.5 : 1)
-                c.voiceName.setVisible(Boolean(m.inVoice))
-                c.voiceName.setText(
-                    m.inVoice
-                        ? `${m.muted ? 'Muted' : m.speaking ? 'Speaking' : 'Voice'} · ${this.shortName(m.voiceChannelName ?? '')}`
-                        : ''
-                )
-                c.zzz.setVisible(m.sleeping)
-                c.bubble?.setVisible(!m.sleeping && m.room === ownRoom)
-            })
+            this.counts.get(room.name)?.setText(String(roomCounts.get(room.name) ?? 0))
+        }
+        for (let i = 0; i < state.members.length; i++) {
+            const m = state.members[i]
+            const target = project(m.x, m.y)
+            let c = this.people.get(m.id)
+            if (!c) {
+                c = this.makeCharacter(m, target.x, target.y)
+                this.people.set(m.id, c)
+            }
+            // Interpolate authoritative 20 Hz snapshots; never trust browser positions.
+            if (Math.hypot(c.root.x - target.x, c.root.y - target.y) > 250) {
+                c.root.setPosition(target.x, target.y)
+            }
+            c.targetX = target.x
+            c.targetY = target.y
+            const avatarChanged = c.member.avatar !== m.avatar
+            if (avatarChanged) {
+                this.avatarManager.release(c.member.id, c.member.avatar)
+            }
+            c.member = m
+            if (avatarChanged) {
+                this.loadAvatar(c, m)
+            }
+            c.name.setText(this.shortName(m.username) + (m.id === this.selfId ? ' (you)' : ''))
+            c.status.setFillStyle(m.sleeping ? 0xc1afed : m.presence === 'offline' && !m.inVoice ? 0x9298a7 : 0x7ed7ad)
+            // Invisible Discord presence must not fade the character you control.
+            c.root.setAlpha(m.presence === 'offline' && m.id !== this.selfId && !m.inVoice ? 0.5 : 1)
+            c.voiceName.setVisible(Boolean(m.inVoice))
+            c.voiceName.setText(
+                m.inVoice
+                    ? `${m.muted ? 'Muted' : m.speaking ? 'Speaking' : 'Voice'} · ${this.shortName(m.voiceChannelName ?? '')}`
+                    : ''
+            )
+            c.zzz.setVisible(m.sleeping)
+            c.bubble?.setVisible(!m.sleeping && m.room === ownRoom)
         }
         this.select(this.selected)
     }
@@ -601,11 +612,11 @@ export class OfficeScene extends Phaser.Scene {
         const wrap = document.createElement('div')
         wrap.className = 'chat-bubble-media'
         wrap.style.cssText =
-            'pointer-events:none;display:inline-flex;flex-direction:column;align-items:center;line-height:0;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.45));'
+            'pointer-events:none;display:inline-flex;flex-direction:column;align-items:center;line-height:0;'
 
         const box = document.createElement('div')
         box.style.cssText =
-            'background:#eee8fa;padding:3px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'
+            'background:#eee8fa;padding:3px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;box-shadow:0 4px 10px rgba(0,0,0,0.45);'
 
         const img = document.createElement('img')
         img.alt = 'Chat media'
