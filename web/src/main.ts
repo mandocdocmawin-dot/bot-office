@@ -56,7 +56,13 @@ function login(error?: string, retryAfterSeconds = 0) {
     const code = new URLSearchParams(location.search).get('login_error') ?? ''
     app.innerHTML = `<main class="login-page"><div class="login-card"><div class="brand"><span class="brand-mark">◉</span>discord office</div><h1>Your people.<br>Your little office.</h1><p>A shared space to work, wander, and hang out with your Discord server.</p><p id="login-error" role="alert"></p><a id="discord-login" class="login-button">Continue with Discord</a><p class="login-privacy">We request only your profile and server list to verify membership. Your display name, avatar, and position appear to people in this office. Room chat disappears after five seconds and is never stored or logged. Log out any time.</p><button class="text-button" id="retry">Refresh connection</button></div><div class="login-art" aria-hidden="true"><span>⌂</span><p>One server. Under one roof.</p></div></main>`
     el('login-error').textContent = error || messages[code] || ''
-    el<HTMLAnchorElement>('discord-login').href = api('/auth/login')
+    const loginLink = el<HTMLAnchorElement>('discord-login')
+    loginLink.href = api('/auth/login')
+    loginLink.onclick = () => {
+        loginLink.textContent = 'Connecting to Discord…'
+        loginLink.style.pointerEvents = 'none'
+        loginLink.style.opacity = '0.7'
+    }
     if (code === 'rate_limited') {
         el('login-error').textContent = 'Discord temporarily limited sign-in requests. You can try signing in again.'
     }
