@@ -184,20 +184,11 @@ function office(user: Identity, mock: boolean) {
         if (!snapshot) {
             return
         }
-        const key = JSON.stringify(
-            snapshot.members.map((m) => [
-                m.id,
-                m.username,
-                m.avatar,
-                m.room,
-                m.sleeping,
-                m.presence,
-                m.inVoice,
-                m.voiceChannelName,
-                m.muted,
-                m.speaking
-            ])
-        )
+        let key = ''
+        for (let i = 0; i < snapshot.members.length; i++) {
+            const m = snapshot.members[i]
+            key += `${m.id}:${m.username}:${m.avatar}:${m.room}:${m.sleeping ? 1 : 0}:${m.presence}:${m.inVoice ? 1 : 0}:${m.voiceChannelName}:${m.muted ? 1 : 0}:${m.speaking ? 1 : 0};`
+        }
         if (!force && rosterKey === key) {
             return
         }

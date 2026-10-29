@@ -12,6 +12,9 @@ export class ActivitySpeaking {
         this.states.clear()
     }
     apply(members: Member[]): Member[] {
+        if (this.states.size === 0) {
+            return members
+        }
         const now = this.now()
         const ids = new Set(members.map((member) => member.id))
         for (const [id, signal] of this.states) {
@@ -22,6 +25,9 @@ export class ActivitySpeaking {
             ) {
                 this.states.delete(id)
             }
+        }
+        if (this.states.size === 0) {
+            return members
         }
         return members.map((member) => {
             const signal = this.states.get(member.id)
