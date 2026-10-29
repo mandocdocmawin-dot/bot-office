@@ -6,6 +6,8 @@ import { createOfficeServer } from './app.js';
 import { startDiscord } from './discord.js';
 dotenv.config({ path: resolve(ROOT, '.env'), quiet: true });
 const mock = process.argv.includes('--mock'), port = Number(process.env.PORT ?? 3001);
+// Render's public proxy cannot reach loopback, even if a stale HOST overrides Docker's default.
+const host = process.env.RENDER === 'true' ? '0.0.0.0' : (process.env.HOST ?? '127.0.0.1');
 const webUrl = (process.env.WEB_URL ?? 'http://localhost:5174').replace(/\/$/, '');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const required = ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI', 'GUILD_ID', 'SESSION_SECRET'];
@@ -22,8 +24,8 @@ const app = createOfficeServer(loadConfig(), {
 let stopDiscord: (() => void) | undefined;
 const shutdown = () => { stopDiscord?.(); void app.close(); };
 app.server.on('error', error => { console.error(error.message); shutdown(); process.exitCode = 1; });
-app.server.listen(port, process.env.HOST ?? '127.0.0.1', () => {
-  console.log(`Office ${mock ? 'mock' : 'multiplayer'} server listening on port ${port}; web URL: ${webUrl}`);
+app.server.listen(port, host, () => {
+  console.log(`Office ${mock ? 'mock' : 'multiplayer'} server listening on ${host}:${port}; web URL: ${webUrl}`);
   if (!mock) stopDiscord = startDiscord(app.office, process.env.DISCORD_TOKEN, process.env.GUILD_ID!, id => app.auth.revokeUser(id));
 });
 process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);

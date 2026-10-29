@@ -3,7 +3,8 @@ import type { ClientPacket, Identity, Packet, Room, Snapshot } from '../../serve
 import { rooms, colorCSS } from './rooms';
 import { OfficeScene } from './scene';
 import './style.css';
-import { activityLogin, activityAvatar, inActivity, ActivityCooldownError } from './activity';
+import { activityLogin, activityAvatar, inActivity, ActivityCooldownError, watchActivitySpeaking } from './activity';
+import { ActivitySpeaking } from './speaking';
 import { connectActivity } from './activity-connection';
 const apiBase = (inActivity ? '' : import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const api = (path: string) => `${apiBase}${path}`;
@@ -68,6 +69,21 @@ function office(user: Identity, mock: boolean) {
   let localBubbles = localStorage.getItem('office-bubbles') !== 'off';
   let socket: WebSocket, retry = 0, stopped = false, rosterKey = '', chatVisible = false;
   const keys = new Set<string>(); let lastDirection = '';
+  const activitySpeaking = new ActivitySpeaking();
+  let activityVoice = false;
+  if (inActivity && !mock) {
+    void watchActivitySpeaking((id, active, channelId) => {
+      if (stopped || socket?.readyState !== WebSocket.OPEN) return;
+      activitySpeaking.set(id, active, channelId);
+      if (snapshot) {
+        snapshot = { ...snapshot, members: activitySpeaking.apply(snapshot.members) };
+        scene.sync(snapshot); renderRoster();
+      }
+    }).then(cleanup => {
+      activityVoice = true;
+      window.addEventListener('pagehide', () => { activitySpeaking.clear(); void cleanup(); }, { once: true });
+    }).catch(() => { activityVoice = false; });
+  }
   const discordControlled = () => snapshot?.members.find(m => m.id === selfId)?.source === 'discord' && snapshot.config.hybridControls === false;
   const send = (packet: ClientPacket) => { if (socket?.readyState === WebSocket.OPEN && !stopped) socket.send(JSON.stringify(packet)); };
   function renderRoster(force = false) {
@@ -162,6 +178,7 @@ function office(user: Identity, mock: boolean) {
       if (packet.type === 'error') return;
       snapshot = packet.state;
       if (inActivity) snapshot.members = snapshot.members.map(member => ({ ...member, avatar: activityAvatar(member.avatar) }));
+      snapshot = { ...snapshot, members: activitySpeaking.apply(snapshot.members) };
       if (packet.type === 'snapshot') { selfId = packet.selfId; scene.setSelf(selfId); }
       scene.sync(snapshot); renderRoster(); bubbleControl();
       const automatic = discordControlled(), linked = snapshot.discord?.state === 'connected';
@@ -170,9 +187,9 @@ function office(user: Identity, mock: boolean) {
       el('discord-status').hidden = !snapshot.discord || snapshot.discord.state === 'disabled';
       el('discord-status').textContent = snapshot.discord?.detail ?? '';
       el('discord-status').classList.toggle('linked', linked);
-      el('voice-status').hidden = !snapshot.voiceMonitor || snapshot.voiceMonitor.state === 'disabled';
-      el('voice-status').textContent = snapshot.voiceMonitor?.detail ?? '';
-      el('voice-status').classList.toggle('linked', snapshot.voiceMonitor?.state === 'connected');
+      el('voice-status').hidden = !activityVoice && (!snapshot.voiceMonitor || snapshot.voiceMonitor.state === 'disabled');
+      el('voice-status').textContent = activityVoice ? 'Speaking indicator connected to this Discord call. Your avatar lights up while you speak.' : `${snapshot.voiceMonitor?.detail ?? ''}${inActivity ? ' Direct Discord speaking events unavailable; voice access may need authorization.' : ''}`;
+      el('voice-status').classList.toggle('linked', activityVoice || snapshot.voiceMonitor?.state === 'connected');
       el('movement-hint').textContent = automatic ? 'Chat in Discord to move · Drag to pan · Scroll to zoom' : linked ? 'Hybrid · WASD / arrows / click to walk · Discord activity sets a new destination' : 'WASD / arrows to walk · Click to move · Drag to pan';
       el<HTMLButtonElement>('chat-open').disabled = automatic;
       document.querySelectorAll<HTMLButtonElement>('.emote').forEach(button => { button.disabled = automatic; });
@@ -183,6 +200,7 @@ function office(user: Identity, mock: boolean) {
       el('update-time').textContent = mock ? 'Demo · move around and try the controls' : 'Live · 20 updates / second';
     };
     socket.onclose = event => {
+      activitySpeaking.clear();
       if (snapshot) { snapshot = { ...snapshot, members: snapshot.members.map(m => ({ ...m, speaking: false, moving: false })) }; scene.sync(snapshot); renderRoster(true); }
       scene.setFrozen(true); scene.clearBubbles(); keys.clear(); el('connection').classList.remove('connected'); el('map-notice').hidden = false;
       if ([4000, 4001, 4008, 1008].includes(event.code)) { stopped = true; el('connection').textContent = 'Disconnected'; el('map-notice').textContent = event.code === 4000 ? 'This account opened another tab. This tab has stopped. Reload to play here.' : event.code === 4001 ? 'Your session ended. Refresh to sign in again.' : 'Connection closed: invalid or excessive input. Refresh to reconnect.'; return; }
