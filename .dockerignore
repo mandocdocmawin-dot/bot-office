@@ -3,6 +3,11 @@
 !package.json
 !package-lock.json
 !config.json
+!packages/
+!packages/shared/
+!packages/shared/package.json
+!packages/shared/src/
+!packages/shared/src/**
 !server/
 !server/package.json
 !server/tsconfig.json

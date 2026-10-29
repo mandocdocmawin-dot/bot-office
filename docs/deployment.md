@@ -15,6 +15,8 @@ Smoke test mock container:
 docker run --rm -p 3001:10000 discord-office node server/dist/index.js --mock
 ```
 
+The image includes the `@office/shared` workspace during dependency installation, compilation, and runtime. Installation does not run `vp config`: that command configures local Git and editor integrations and requires development tools that are absent from the production image. Dependency lifecycle scripts remain enabled for native libraries.
+
 ## Render Blueprint
 
 Deploy via `render.yaml`:
