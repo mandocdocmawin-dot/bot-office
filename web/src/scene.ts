@@ -247,7 +247,8 @@ export class OfficeScene extends Phaser.Scene {
     update(time: number, delta: number) {
         for (const c of this.people.values()) {
             const own = c.member.id === this.selfId
-            const blend = this.reducedMotion.matches || (own && !c.member.moving) ? 1 : 1 - Math.exp(-delta / (own ? 18 : 55))
+            const blend =
+                this.reducedMotion.matches || (own && !c.member.moving) ? 1 : 1 - Math.exp(-delta / (own ? 18 : 55))
             const previousX = c.root.x
             const previousY = c.root.y
             c.root.x += (c.targetX - c.root.x) * blend

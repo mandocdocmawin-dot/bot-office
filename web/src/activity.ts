@@ -97,7 +97,7 @@ export async function watchActivitySpeaking(onSpeaking: (id: string, active: boo
     if (!client?.channelId) {
         throw new Error('No Discord Activity voice channel.')
     }
-    const channelId = client.channelId
+    const { channelId } = client
     const args = { channel_id: channelId }
     const start = (event: { user_id: string; channel_id?: string }) => {
         if (!event.channel_id || event.channel_id === channelId) {

@@ -131,7 +131,7 @@ function office(user: Identity, mock: boolean) {
     let stopped = false
     let rosterKey = ''
     let chatVisible = false
-    const keys = new KeyboardMovement(({ x, y }) => send({ type: 'input', dx: x, dy: y }))''
+    const keys = new KeyboardMovement(({ x, y }) => send({ type: 'input', dx: x, dy: y }))
     const activitySpeaking = new ActivitySpeaking()
     let activityVoice = false
     if (inActivity && !mock) {

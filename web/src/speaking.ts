@@ -25,11 +25,15 @@ export class ActivitySpeaking {
         }
         return members.map((member) => {
             const signal = this.states.get(member.id)
-            if (!signal) return member
+            if (!signal) {
+                return member
+            }
             if (!member.inVoice || member.voiceChannelId !== signal.channelId || member.muted) {
                 // A start can arrive before the first membership snapshot. Keep it
                 // briefly so we don't need to wait for the next speaking start.
-                if (signal.matched || member.muted) this.states.delete(member.id)
+                if (signal.matched || member.muted) {
+                    this.states.delete(member.id)
+                }
                 return member
             }
             signal.matched = true
