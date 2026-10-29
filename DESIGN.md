@@ -6,4 +6,6 @@ The existing dark shell, Manrope headings, DM Sans controls, camera, search and 
 
 The map is the primary interface. Expand makes it fill the browser; Find me and roster names follow a player. Mouse/touch click-to-move supports smaller screens. Room chat is a small transient input panel, not a message history. Login explains exactly what profile data appears and that chat is never stored.
 
+Keyboard transitions send immediately, with held input renewed separately. Screen diagonals use the inverse projection and normalized world speed. Own-avatar interpolation uses an 18ms time constant, remote avatars retain 55ms, and an authoritative stop removes the own-avatar interpolation tail. Reduced motion continues to use authoritative positions directly.
+
 Hybrid movement combines Discord destinations with manual takeover. Walking uses independent leg/arm strides driven by rendered travel distance, including the interpolation after the final movement snapshot. Steps alternate and reset at rest. A separate green head ring and animated bars indicate monitored speaking; connected/muted voice labels remain distinct. Own-avatar opacity stays full even with invisible Discord presence. Reduced motion uses smaller limb strides without body bounce or sway and freezes ring movement while preserving the state indicator.

@@ -5,6 +5,7 @@ import { OfficeScene } from './scene';
 import './style.css';
 import { activityLogin, activityAvatar, inActivity, ActivityCooldownError, watchActivitySpeaking } from './activity';
 import { ActivitySpeaking } from './speaking';
+import { KeyboardMovement, movementKey } from './keyboard-movement';
 import { connectActivity } from './activity-connection';
 const apiBase = (inActivity ? '' : import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const api = (path: string) => `${apiBase}${path}`;
@@ -65,18 +66,17 @@ function office(user: Identity, mock: boolean) {
   if (inActivity) el('logout').hidden = true;
   if (inActivity) document.querySelector<HTMLAnchorElement>('.topbar .brand')!.onclick = event => { event.preventDefault(); location.reload(); };
   new Phaser.Game({ type: Phaser.AUTO, parent: 'map', backgroundColor: '#09070f', scene, scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' }, render: { antialias: true }, audio: { noAudio: true } });
-  let snapshot: Snapshot | undefined, selected: Room | undefined, query = '', selfId = user.id;
+  let snapshot: Snapshot | undefined, serverSnapshot: Snapshot | undefined, selected: Room | undefined, query = '', selfId = user.id;
   let localBubbles = localStorage.getItem('office-bubbles') !== 'off';
   let socket: WebSocket, retry = 0, stopped = false, rosterKey = '', chatVisible = false;
-  const keys = new Set<string>(); let lastDirection = '';
   const activitySpeaking = new ActivitySpeaking();
   let activityVoice = false;
   if (inActivity && !mock) {
     void watchActivitySpeaking((id, active, channelId) => {
-      if (stopped || socket?.readyState !== WebSocket.OPEN) return;
+      if (stopped) return;
       activitySpeaking.set(id, active, channelId);
-      if (snapshot) {
-        snapshot = { ...snapshot, members: activitySpeaking.apply(snapshot.members) };
+      if (serverSnapshot && socket?.readyState === WebSocket.OPEN) {
+        snapshot = { ...serverSnapshot, members: activitySpeaking.apply(serverSnapshot.members) };
         scene.sync(snapshot); renderRoster();
       }
     }).then(cleanup => {
@@ -86,6 +86,7 @@ function office(user: Identity, mock: boolean) {
   }
   const discordControlled = () => snapshot?.members.find(m => m.id === selfId)?.source === 'discord' && snapshot.config.hybridControls === false;
   const send = (packet: ClientPacket) => { if (socket?.readyState === WebSocket.OPEN && !stopped) socket.send(JSON.stringify(packet)); };
+  const keys = new KeyboardMovement(({ x, y }) => send({ type: 'input', dx: x, dy: y }));
   function renderRoster(force = false) {
     if (!snapshot) return;
     const key = JSON.stringify(snapshot.members.map(m => [m.id, m.username, m.avatar, m.room, m.sleeping, m.presence, m.inVoice, m.voiceChannelName, m.muted, m.speaking]));
@@ -136,34 +137,32 @@ function office(user: Identity, mock: boolean) {
     catch { button.disabled = false; el('map-notice').hidden = false; el('map-notice').textContent = 'Could not end your session. Check the connection and try Log out again.'; }
   };
   document.querySelectorAll<HTMLButtonElement>('.emote').forEach(button => { button.onclick = () => send({ type: 'emote', index: Number(button.dataset.index) }); });
-  window.addEventListener('office-move', event => { if (!chatVisible && !discordControlled()) { const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail; keys.clear(); lastDirection = '0:0'; send({ type: 'move_to', x, y }); } });
+  window.addEventListener('office-move', event => { if (!chatVisible && !discordControlled()) { const { x, y } = (event as CustomEvent<{ x: number; y: number }>).detail; keys.clear(); send({ type: 'move_to', x, y }); } });
   window.addEventListener('office-zoom', event => { el('zoom-value').textContent = `${(event as CustomEvent<number>).detail}%`; });
-  const movementKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
   let lastActivitySignal = 0;
   const activitySignal = () => { if (Date.now() - lastActivitySignal > 900) { lastActivitySignal = Date.now(); send({ type: 'wake' }); } };
   window.addEventListener('pointerdown', activitySignal); window.addEventListener('wheel', activitySignal, { passive: true }); window.addEventListener('keydown', activitySignal);
   window.addEventListener('keydown', event => {
     const target = event.target as HTMLElement; const typing = ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable;
     const key = event.key.toLowerCase();
+    const moveKey = movementKey(event);
     if (key === 'escape') { closeChat(); document.querySelector('.map-shell')!.classList.remove('expanded'); el('expand').textContent = 'Expand'; return; }
-    if (typing || el<HTMLDialogElement>('help-dialog').open) return;
-    if (discordControlled()) { if (movementKeys.includes(key)) event.preventDefault(); return; }
+    if (typing || el<HTMLDialogElement>('help-dialog').open || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (discordControlled()) { if (moveKey) event.preventDefault(); return; }
     if (key === 'enter') { event.preventDefault(); openChat(); return; }
-    if (movementKeys.includes(key)) { event.preventDefault(); keys.add(key); }
+    if (moveKey) { event.preventDefault(); keys.press(moveKey); }
     else if (/^[1-5]$/.test(key) && !event.repeat) send({ type: 'emote', index: Number(key) - 1 });
     else if (!event.repeat) send({ type: 'wake' });
   });
-  window.addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
-  const stopMovement = () => { keys.clear(); lastDirection = ''; send({ type: 'input', dx: 0, dy: 0 }); };
+  window.addEventListener('keyup', event => { const key = movementKey(event); if (key) keys.release(key); });
+  const stopMovement = () => keys.clear();
   window.addEventListener('blur', stopMovement); document.addEventListener('visibilitychange', () => { if (document.hidden) stopMovement(); });
-  setInterval(() => {
-    const up = keys.has('w') || keys.has('arrowup'), down = keys.has('s') || keys.has('arrowdown'), left = keys.has('a') || keys.has('arrowleft'), right = keys.has('d') || keys.has('arrowright');
-    const sx = Number(right) - Number(left), sy = Number(down) - Number(up);
-    const dx = (sx + sy) / Math.SQRT2, dy = (sy - sx) / Math.SQRT2, length = Math.max(1, Math.hypot(dx, dy));
-    const direction = `${dx}:${dy}`;
-    if (sx || sy || (lastDirection && direction !== lastDirection)) send({ type: 'input', dx: dx / length, dy: dy / length });
-    lastDirection = direction;
-  }, 70);
+  document.addEventListener('focusin', event => {
+    const target = event.target as HTMLElement;
+    if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) stopMovement();
+  });
+  el('help').addEventListener('click', stopMovement);
+  setInterval(() => keys.heartbeat(), 70);
   function connect() {
     if (stopped) return;
     const relative = new URL(api('/ws'), location.href); relative.protocol = relative.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -176,9 +175,9 @@ function office(user: Identity, mock: boolean) {
       let packet: Packet; try { packet = JSON.parse(event.data); } catch { return; }
       if (packet.type === 'bubble') { if (localBubbles && snapshot?.members.find(m => m.id === selfId)?.room === packet.room) scene.speak(packet.memberId, packet.text, packet.duration); return; }
       if (packet.type === 'error') return;
-      snapshot = packet.state;
-      if (inActivity) snapshot.members = snapshot.members.map(member => ({ ...member, avatar: activityAvatar(member.avatar) }));
-      snapshot = { ...snapshot, members: activitySpeaking.apply(snapshot.members) };
+      serverSnapshot = packet.state;
+      if (inActivity) serverSnapshot = { ...serverSnapshot, members: serverSnapshot.members.map(member => ({ ...member, avatar: activityAvatar(member.avatar) })) };
+      snapshot = { ...serverSnapshot, members: activitySpeaking.apply(serverSnapshot.members) };
       if (packet.type === 'snapshot') { selfId = packet.selfId; scene.setSelf(selfId); }
       scene.sync(snapshot); renderRoster(); bubbleControl();
       const automatic = discordControlled(), linked = snapshot.discord?.state === 'connected';
@@ -201,6 +200,7 @@ function office(user: Identity, mock: boolean) {
     };
     socket.onclose = event => {
       activitySpeaking.clear();
+      serverSnapshot = undefined;
       if (snapshot) { snapshot = { ...snapshot, members: snapshot.members.map(m => ({ ...m, speaking: false, moving: false })) }; scene.sync(snapshot); renderRoster(true); }
       scene.setFrozen(true); scene.clearBubbles(); keys.clear(); el('connection').classList.remove('connected'); el('map-notice').hidden = false;
       if ([4000, 4001, 4008, 1008].includes(event.code)) { stopped = true; el('connection').textContent = 'Disconnected'; el('map-notice').textContent = event.code === 4000 ? 'This account opened another tab. This tab has stopped. Reload to play here.' : event.code === 4001 ? 'Your session ended. Refresh to sign in again.' : 'Connection closed: invalid or excessive input. Refresh to reconnect.'; return; }

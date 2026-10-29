@@ -141,7 +141,10 @@ export class OfficeScene extends Phaser.Scene {
   }
   update(time: number, delta: number) {
     for (const c of this.people.values()) {
-      const blend = this.reducedMotion.matches ? 1 : 1 - Math.exp(-delta / 55);
+      const own = c.member.id === this.selfId;
+      // Keep remote interpolation smooth; own input should not trail the
+      // latest server position or keep sliding after the server has stopped.
+      const blend = this.reducedMotion.matches || (own && !c.member.moving) ? 1 : 1 - Math.exp(-delta / (own ? 18 : 55));
       const previousX = c.root.x, previousY = c.root.y;
       c.root.x += (c.targetX - c.root.x) * blend; c.root.y += (c.targetY - c.root.y) * blend;
       const travelled = Math.hypot(c.root.x - previousX, c.root.y - previousY);
