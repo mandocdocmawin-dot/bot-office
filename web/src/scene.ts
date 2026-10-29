@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import type { Member, Room, Snapshot } from '@office/shared/protocol'
 import { AvatarTextureManager } from './avatar-manager'
+import { robotStyle } from './character-styles'
 import { eventBus } from './events'
 import { colorCSS, doors, rooms } from './rooms'
 import { Furnishing, WORLD_HEIGHT, WORLD_WIDTH, corners, polygon, project, slab, unproject } from './isometric'
@@ -434,6 +435,14 @@ export class OfficeScene extends Phaser.Scene {
             const m = state.members[i]
             const target = project(m.x, m.y)
             let c = this.people.get(m.id)
+            if (c && c.member.character !== m.character) {
+                this.avatarManager.release(c.member.id, c.member.avatar)
+                const current = { x: c.root.x, y: c.root.y }
+                this.tweens.killTweensOf(c.root)
+                c.root.destroy()
+                c = this.makeCharacter(m, current.x, current.y)
+                this.people.set(m.id, c)
+            }
             if (!c) {
                 c = this.makeCharacter(m, target.x, target.y)
                 this.people.set(m.id, c)
@@ -473,23 +482,59 @@ export class OfficeScene extends Phaser.Scene {
     }
     private makeCharacter(m: Member, x: number, y: number): Character {
         const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
-        const shirt = [0x77_cc_bb, 0xb2_96_dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
+        const robot = robotStyle(m.character)
+        const shirt = robot?.shirt ?? [0x77_cc_bb, 0xb2_96_dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
         const root = this.add.container(x, y).setSize(32, 64).setDepth(1000 + Math.round(y))
         const shadow = this.add.ellipse(0, 0, 33, 14, 0x02_03_08, 0.5)
         const body = this.add.container(0, 0)
         const person = this.add.graphics()
         person.fillStyle(shirt).fillRoundedRect(-12, -34, 25, 23, 4)
         person.fillStyle(Phaser.Display.Color.IntegerToColor(shirt).darken(20).color).fillRect(6, -30, 8, 17)
+        if (m.character === 'blue') {
+            person.fillStyle(0xe4e4f4).fillRect(-6, -31, 2, 8).fillRect(3, -31, 2, 8)
+            person.fillStyle(0x2862b6).fillRect(-6, -20, 12, 5)
+        } else if (m.character === 'orange') {
+            person.fillStyle(0xffedcf).fillRect(-1, -32, 3, 20)
+        } else if (m.character === 'lavender') {
+            person.fillStyle(0xe2d1f7).fillTriangle(-8, -33, 0, -29, -4, -25).fillTriangle(8, -33, 0, -29, 4, -25)
+            person.fillStyle(0x48304f).fillRect(-2, -29, 4, 11).fillTriangle(-3, -18, 3, -18, 0, -14)
+        } else if (m.character === 'mint') {
+            person.fillStyle(0xffedcf).fillRect(3, -27, 6, 8)
+        }
         const leg = (x: number) =>
             this.add.container(x, -16, [
-                this.add.rectangle(0, 0, 7, 13, 0x24_23_36).setOrigin(0.5, 0),
-                this.add.rectangle(0, 12, 9, 4, 0xc9_c4_d9).setOrigin(0.5, 0)
+                this.add.rectangle(0, 0, 7, 13, robot?.limbs ?? 0x24_23_36).setOrigin(0.5, 0),
+                this.add.rectangle(0, 12, 9, 4, robot?.shoes ?? 0xc9_c4_d9).setOrigin(0.5, 0)
             ])
         const legs: Character['legs'] = [leg(-6), leg(7)]
         const arm = (x: number, y: number) =>
-            this.add.container(x, y, [this.add.rectangle(0, 0, 6, 14, 0xc6_a3_8a).setOrigin(0.5, 0)])
+            this.add.container(x, y, robot ? [
+                this.add.rectangle(0, 0, 7, 9, shirt).setOrigin(0.5, 0),
+                this.add.rectangle(0, 9, 6, 5, m.character === 'pink' || m.character === 'lavender' ? robot.shell : robot.limbs).setOrigin(0.5, 0)
+            ] : [this.add.rectangle(0, 0, 6, 14, 0xc6_a3_8a).setOrigin(0.5, 0)])
         const arms: Character['arms'] = [arm(-14, -29), arm(14, -27)]
         const head = this.add.circle(0, -44, 15, 0x44_41_59).setStrokeStyle(2, 0xc7c0dc)
+        head.setVisible(!robot)
+        const robotHead = this.add.graphics()
+        if (robot) {
+            robotHead.fillStyle(Phaser.Display.Color.IntegerToColor(robot.shell).darken(15).color).fillRect(12, -60, 6, 29)
+            robotHead.fillStyle(robot.shell).fillRoundedRect(-17, -62, 31, 30, 3)
+            robotHead.fillStyle(0x242638).fillRoundedRect(-13, -58, 23, 22, 2)
+            robotHead.fillStyle(robot.eyes).fillRect(-9, -52, 5, 7).fillRect(2, -52, 5, 7)
+            if (m.character !== 'blue' && m.character !== 'orange') {
+                robotHead.fillRect(-4, -41, 7, 2)
+            }
+            if (m.character === 'pink') {
+                robotHead.fillStyle(0x7fdeb7).fillRect(-21, -55, 5, 17).fillRect(15, -55, 6, 17).fillRect(-17, -65, 35, 4)
+                robotHead.fillStyle(0x303244).fillRect(15, -39, 3, 7).fillRect(5, -34, 12, 3)
+                robotHead.fillStyle(0x7fdeb7).fillRect(3, -36, 5, 5)
+            } else if (m.character === 'mint') {
+                robotHead.fillStyle(0x244c4e).fillRect(6, -70, 3, 8)
+                robotHead.fillStyle(0x79c9a2).fillRect(4, -74, 7, 5)
+            } else {
+                robotHead.fillStyle(shirt).fillRect(-21, -54, 5, 14).fillRect(16, -54, 5, 14)
+            }
+        }
         const voiceRing = this.add.circle(0, -44, 20, 0x71_e4_ac, 0.07).setStrokeStyle(3, 0x71e4ac).setVisible(false)
         const initial = this.add
             .text(0, -44, [...m.username][0] ?? '?', {
@@ -498,6 +543,7 @@ export class OfficeScene extends Phaser.Scene {
                 color: '#ffffff'
             })
             .setOrigin(0.5)
+            .setVisible(!robot)
         const name = this.add
             .text(0, 12, this.shortName(m.username), {
                 fontFamily: 'Arial',
@@ -533,7 +579,7 @@ export class OfficeScene extends Phaser.Scene {
                 ...talkBars
             ])
             .setVisible(false)
-        body.add([voiceRing, ...legs, arms[0], person, arms[1], head, initial, status])
+        body.add([voiceRing, ...legs, arms[0], person, arms[1], head, robotHead, initial, status])
         root.add([shadow, body, name, zzz, voiceName, talk])
         const c: Character = {
             root,
@@ -557,6 +603,10 @@ export class OfficeScene extends Phaser.Scene {
         return c
     }
     private loadAvatar(c: Character, m: Member) {
+        if (robotStyle(m.character)) {
+            c.body.getByName('avatar')?.destroy()
+            return
+        }
         if (!m.avatar) {
             c.body.getByName('avatar')?.destroy()
             return

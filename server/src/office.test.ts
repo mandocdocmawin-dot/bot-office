@@ -26,6 +26,34 @@ const fixture = () => {
         }
     }
 }
+
+test('character choices are validated and cannot target another member', () => {
+    const { office } = fixture()
+    office.join({ id: '2', username: 'Other', avatar: null })
+    const packet = parsePacket(JSON.stringify({ type: 'character', style: 'pink', id: '2' }))!
+    assert.deepEqual(packet, { type: 'character', style: 'pink' })
+    office.input('1', packet)
+    assert.equal(office.snapshot().members.find((p) => p.id === '1')?.character, 'pink')
+    assert.equal(office.snapshot().members.find((p) => p.id === '2')?.character, undefined)
+    for (const style of ['invalid', '../image.png', null, 42]) {
+        assert.equal(parsePacket(JSON.stringify({ type: 'character', style })), undefined)
+    }
+    office.leave('1')
+    office.join({ id: '1', username: 'Test', avatar: null })
+    assert.equal(office.members.get('1')?.character, 'pink')
+    office.input('1', { type: 'character', style: 'default' })
+    assert.equal(office.snapshot().members.find((p) => p.id === '1')?.character, 'default')
+})
+
+test('Discord profile refresh and automatic controls preserve character choices', () => {
+    const { office, config } = fixture()
+    config.discord!.hybrid_controls = false
+    office.upsertDiscord({ id: '1', username: 'Test', avatar: null }, 'online')
+    office.input('1', { type: 'character', style: 'mint' })
+    office.upsertDiscord({ id: '1', username: 'New name', avatar: '/avatars/1.svg' }, 'idle')
+    assert.equal(office.snapshot().members[0].character, 'mint')
+    assert.equal(office.snapshot().members[0].username, 'New name')
+})
 test('spawns in Front Office; speed is bounded and diagonal input is normalized', () => {
     const { office, config, advance } = fixture()
     const p = office.members.get('1')!

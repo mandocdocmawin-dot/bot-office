@@ -11,6 +11,7 @@ import type {
 } from './protocol.js'
 import { World } from './world.js'
 import { isMediaUrl } from './media.js'
+import { isCharacterStyle, type CharacterStyle } from './protocol.js'
 
 interface Player extends Member {
     lastInput: number
@@ -25,6 +26,7 @@ interface Player extends Member {
 }
 export const EMOTES = ['👋', '❤️', '😂', '🎉', '☕']
 export class Office {
+    private characters = new Map<string, CharacterStyle>()
     members = new Map<string, Player>()
     world: World
     discord: DiscordStatus = { state: 'disabled', detail: 'Discord activity is disabled.' }
@@ -57,6 +59,7 @@ export class Office {
                         id,
                         username,
                         avatar,
+                        character,
                         x,
                         y,
                         room,
@@ -73,6 +76,7 @@ export class Office {
                         id,
                         username,
                         avatar,
+                        character,
                         x: Math.round(x * 10) / 10,
                         y: Math.round(y * 10) / 10,
                         room,
@@ -110,6 +114,7 @@ export class Office {
             }
         this.members.set(identity.id, {
             ...identity,
+            character: this.characters.get(identity.id),
             x: position.x,
             y: position.y,
             room: position.room,
@@ -256,6 +261,13 @@ export class Office {
     input(id: string, packet: ClientPacket) {
         const p = this.members.get(id)
         if (!p) {
+            return
+        }
+        if (packet.type === 'character') {
+            if (isCharacterStyle(packet.style)) {
+                p.character = packet.style
+                this.characters.set(id, packet.style)
+            }
             return
         }
         if (p.source === 'discord' && this.config.discord?.hybrid_controls === false) {
