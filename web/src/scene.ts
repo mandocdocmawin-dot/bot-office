@@ -22,6 +22,7 @@ interface Character {
     voiceName: Phaser.GameObjects.Text
     legs: [Phaser.GameObjects.Container, Phaser.GameObjects.Container]
     arms: [Phaser.GameObjects.Container, Phaser.GameObjects.Container]
+    depth: number
 }
 export class OfficeScene extends Phaser.Scene {
     private people = new Map<string, Character>()
@@ -47,7 +48,7 @@ export class OfficeScene extends Phaser.Scene {
         this.built = true
         const base = this.add.graphics()
         slab(base, 0, 0, 1400, 1000, -5, 38, 0x17_16_22)
-        polygon(base, corners(18, 18, 1364, 964, -4), 0x201d2a)
+        polygon(base, corners(18, 18, 1364, 964, -4), 0x20_1d_2a)
         for (const door of doors) {
             polygon(base, corners(door.x, door.y, door.w, door.h), 0x49_41_57)
             const p = project(door.x + door.w / 2, door.y + door.h / 2)
@@ -251,33 +252,57 @@ export class OfficeScene extends Phaser.Scene {
                 this.reducedMotion.matches || (own && !c.member.moving) ? 1 : 1 - Math.exp(-delta / (own ? 18 : 55))
             const previousX = c.root.x
             const previousY = c.root.y
-            c.root.x += (c.targetX - c.root.x) * blend
-            c.root.y += (c.targetY - c.root.y) * blend
+            if (Math.abs(c.targetX - c.root.x) < 0.05) {
+                c.root.x = c.targetX
+            } else {
+                c.root.x += (c.targetX - c.root.x) * blend
+            }
+            if (Math.abs(c.targetY - c.root.y) < 0.05) {
+                c.root.y = c.targetY
+            } else {
+                c.root.y += (c.targetY - c.root.y) * blend
+            }
             const travelled = Math.hypot(c.root.x - previousX, c.root.y - previousY)
-            c.root.setDepth((c.bubble ? 4000 : 1000) + c.root.y)
+            const targetDepth = (c.bubble ? 4000 : 1000) + Math.round(c.root.y)
+            if (c.depth !== targetDepth) {
+                c.root.setDepth(targetDepth)
+                c.depth = targetDepth
+            }
             // Follow the rendered movement, including interpolation after a stop packet.
             // Distance-driven steps stay in sync at different speeds and frame rates.
             const walking = !this.frozen && (c.member.moving || travelled > 0.03)
-            c.walkPhase = walking ? (c.walkPhase + (Math.min(travelled, 12) * Math.PI) / 19) % (Math.PI * 2) : 0
-            const stride = Math.sin(c.walkPhase) * (this.reducedMotion.matches ? 0.35 : 1)
-            c.legs[0].setPosition(-6 + stride * 2, -16 - Math.max(0, stride) * 5).setAngle(stride * 28)
-            c.legs[1].setPosition(7 - stride * 2, -16 - Math.max(0, -stride) * 5).setAngle(-stride * 28)
-            c.arms[0].setAngle(-stride * 20)
-            c.arms[1].setAngle(stride * 20)
-            const bounce = walking && !this.reducedMotion.matches
-            c.body.y = bounce ? -Math.abs(stride) * 2 : 0
-            c.body.angle = bounce ? stride * 2 : 0
+            if (walking || c.walkPhase !== 0) {
+                c.walkPhase = walking ? (c.walkPhase + (Math.min(travelled, 12) * Math.PI) / 19) % (Math.PI * 2) : 0
+                const stride = Math.sin(c.walkPhase) * (this.reducedMotion.matches ? 0.35 : 1)
+                c.legs[0].setPosition(-6 + stride * 2, -16 - Math.max(0, stride) * 5).setAngle(stride * 28)
+                c.legs[1].setPosition(7 - stride * 2, -16 - Math.max(0, -stride) * 5).setAngle(-stride * 28)
+                c.arms[0].setAngle(-stride * 20)
+                c.arms[1].setAngle(stride * 20)
+                const bounce = walking && !this.reducedMotion.matches
+                c.body.y = bounce ? -Math.abs(stride) * 2 : 0
+                c.body.angle = bounce ? stride * 2 : 0
+            }
             const speaking = !this.frozen && Boolean(c.member.speaking)
-            c.voiceRing.setVisible(speaking)
-            c.talk.setVisible(speaking && !c.bubble)
-            const animate = speaking && !this.reducedMotion.matches
-            c.voiceRing.setScale(animate ? 1.05 + Math.sin(time / 100) * 0.08 : 1)
-            c.talkBars.forEach((bar, i) =>
-                bar.setScale(1, animate ? 0.45 + Math.abs(Math.sin(time / 95 + i * 0.9)) * 0.65 : 0.7)
-            )
-            if (animate && !walking) {
-                c.body.y = Math.sin(time / 95) * 1.5
-                c.body.angle = Math.sin(time / 160) * 1.2
+            if (c.voiceRing.visible !== speaking) {
+                c.voiceRing.setVisible(speaking)
+            }
+            const talkVisible = speaking && !c.bubble
+            if (c.talk.visible !== talkVisible) {
+                c.talk.setVisible(talkVisible)
+            }
+            if (speaking) {
+                const animate = !this.reducedMotion.matches
+                c.voiceRing.setScale(animate ? 1.05 + Math.sin(time / 100) * 0.08 : 1)
+                c.talkBars.forEach((bar, i) =>
+                    bar.setScale(1, animate ? 0.45 + Math.abs(Math.sin(time / 95 + i * 0.9)) * 0.65 : 0.7)
+                )
+                if (animate && !walking) {
+                    c.body.y = Math.sin(time / 95) * 1.5
+                    c.body.angle = Math.sin(time / 160) * 1.2
+                }
+            } else if (!walking) {
+                c.body.y = 0
+                c.body.angle = 0
             }
         }
     }
@@ -370,45 +395,48 @@ export class OfficeScene extends Phaser.Scene {
                 this.people.delete(id)
             }
         }
+        const roomCounts = new Map<string, number>()
+        for (let i = 0; i < state.members.length; i++) {
+            const r = state.members[i].room
+            roomCounts.set(r, (roomCounts.get(r) ?? 0) + 1)
+        }
         for (const room of rooms) {
-            const members = state.members.filter((m) => m.room === room.name).sort((a, b) => a.id.localeCompare(b.id))
-            this.counts.get(room.name)?.setText(String(members.length))
-            members.forEach((m) => {
-                const target = project(m.x, m.y)
-                let c = this.people.get(m.id)
-                if (!c) {
-                    c = this.makeCharacter(m, target.x, target.y)
-                    this.people.set(m.id, c)
-                }
-                // Interpolate authoritative 20 Hz snapshots; never trust browser positions.
-                if (Math.hypot(c.root.x - target.x, c.root.y - target.y) > 250) {
-                    c.root.setPosition(target.x, target.y)
-                }
-                c.targetX = target.x
-                c.targetY = target.y
-                const avatarChanged = c.member.avatar !== m.avatar
-                if (avatarChanged) {
-                    this.avatarManager.release(c.member.id, c.member.avatar)
-                }
-                c.member = m
-                if (avatarChanged) {
-                    this.loadAvatar(c, m)
-                }
-                c.name.setText(this.shortName(m.username) + (m.id === this.selfId ? ' (you)' : ''))
-                c.status.setFillStyle(
-                    m.sleeping ? 0xc1afed : m.presence === 'offline' && !m.inVoice ? 0x9298a7 : 0x7ed7ad
-                )
-                // Invisible Discord presence must not fade the character you control.
-                c.root.setAlpha(m.presence === 'offline' && m.id !== this.selfId && !m.inVoice ? 0.5 : 1)
-                c.voiceName.setVisible(Boolean(m.inVoice))
-                c.voiceName.setText(
-                    m.inVoice
-                        ? `${m.muted ? 'Muted' : m.speaking ? 'Speaking' : 'Voice'} · ${this.shortName(m.voiceChannelName ?? '')}`
-                        : ''
-                )
-                c.zzz.setVisible(m.sleeping)
-                c.bubble?.setVisible(!m.sleeping && m.room === ownRoom)
-            })
+            this.counts.get(room.name)?.setText(String(roomCounts.get(room.name) ?? 0))
+        }
+        for (let i = 0; i < state.members.length; i++) {
+            const m = state.members[i]
+            const target = project(m.x, m.y)
+            let c = this.people.get(m.id)
+            if (!c) {
+                c = this.makeCharacter(m, target.x, target.y)
+                this.people.set(m.id, c)
+            }
+            // Interpolate authoritative 20 Hz snapshots; never trust browser positions.
+            if (Math.hypot(c.root.x - target.x, c.root.y - target.y) > 250) {
+                c.root.setPosition(target.x, target.y)
+            }
+            c.targetX = target.x
+            c.targetY = target.y
+            const avatarChanged = c.member.avatar !== m.avatar
+            if (avatarChanged) {
+                this.avatarManager.release(c.member.id, c.member.avatar)
+            }
+            c.member = m
+            if (avatarChanged) {
+                this.loadAvatar(c, m)
+            }
+            c.name.setText(this.shortName(m.username) + (m.id === this.selfId ? ' (you)' : ''))
+            c.status.setFillStyle(m.sleeping ? 0xc1afed : m.presence === 'offline' && !m.inVoice ? 0x9298a7 : 0x7ed7ad)
+            // Invisible Discord presence must not fade the character you control.
+            c.root.setAlpha(m.presence === 'offline' && m.id !== this.selfId && !m.inVoice ? 0.5 : 1)
+            c.voiceName.setVisible(Boolean(m.inVoice))
+            c.voiceName.setText(
+                m.inVoice
+                    ? `${m.muted ? 'Muted' : m.speaking ? 'Speaking' : 'Voice'} · ${this.shortName(m.voiceChannelName ?? '')}`
+                    : ''
+            )
+            c.zzz.setVisible(m.sleeping)
+            c.bubble?.setVisible(!m.sleeping && m.room === ownRoom)
         }
         this.select(this.selected)
     }
@@ -419,7 +447,7 @@ export class OfficeScene extends Phaser.Scene {
     private makeCharacter(m: Member, x: number, y: number): Character {
         const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
         const shirt = [0x77_cc_bb, 0xb296dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
-        const root = this.add.container(x, y)
+        const root = this.add.container(x, y).setSize(32, 64).setDepth(1000 + Math.round(y))
         const shadow = this.add.ellipse(0, 0, 33, 14, 0x02_03_08, 0.5)
         const body = this.add.container(0, 0)
         const person = this.add.graphics()
@@ -473,7 +501,10 @@ export class OfficeScene extends Phaser.Scene {
             .setVisible(false)
         const talkBars = [0, 1, 2].map((i) => this.add.rectangle(-8 + i * 8, 0, 4, 15, 0x8cf0b5).setOrigin(0.5, 1))
         const talk = this.add
-            .container(0, -77, [this.add.rectangle(0, -7, 35, 24, 0x142d25).setStrokeStyle(1, 0x52_9f_77), ...talkBars])
+            .container(0, -77, [
+                this.add.rectangle(0, -7, 35, 24, 0x14_2d_25).setStrokeStyle(1, 0x52_9f_77),
+                ...talkBars
+            ])
             .setVisible(false)
         body.add([voiceRing, ...legs, arms[0], person, arms[1], head, initial, status])
         root.add([shadow, body, name, zzz, voiceName, talk])
@@ -492,7 +523,8 @@ export class OfficeScene extends Phaser.Scene {
             talkBars,
             voiceName,
             legs,
-            arms
+            arms,
+            depth: 1000 + Math.round(y)
         }
         this.loadAvatar(c, m)
         return c
@@ -503,7 +535,7 @@ export class OfficeScene extends Phaser.Scene {
             return
         }
         this.avatarManager.acquire(m.id, m.avatar, (key) => {
-            if (!c.root.scene || c.member.avatar !== m.avatar) {
+            if (!c.root.scene || c.member.avatar !== m.avatar || !this.textures.exists(key)) {
                 return
             }
             c.body.getByName('avatar')?.destroy()

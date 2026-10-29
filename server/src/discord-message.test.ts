@@ -1,6 +1,6 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
-import { cleanContent, ChannelType } from 'discord.js'
+import { ChannelType, cleanContent } from 'discord.js'
 import type { TextChannel } from 'discord.js'
 import { extractMediaContent, changedMessagePreview } from './discord-message.js'
 import { loadConfig } from './config.js'

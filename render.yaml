@@ -11,6 +11,10 @@ services:
       envVars:
           - key: NODE_ENV
             value: production
+          - key: NODE_COMPILE_CACHE
+            value: /app/.cache
+          - key: NODE_OPTIONS
+            value: '--max-old-space-size=384'
           - key: HOST
             value: 0.0.0.0
           - key: PORT

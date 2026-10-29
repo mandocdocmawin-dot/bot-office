@@ -1,6 +1,8 @@
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { WebSocket, WebSocketServer } from 'ws'
 import { Auth } from './auth.js'
 import type { AuthOptions } from './auth.js'
@@ -9,7 +11,7 @@ import { ROOT } from './config.js'
 import type { Config } from './config.js'
 import { startMock } from './mock.js'
 import { GameLoop } from './loop.js'
-import { isMediaUrl, resolveMediaUrl, loadMediaImage, mediaProviderUrl } from './media.js'
+import { isMediaUrl, loadMediaImage, mediaProviderUrl, resolveMediaUrl } from './media.js'
 import type { ClientPacket, Member, Packet } from './protocol.js'
 
 export function parsePacket(raw: string): ClientPacket | undefined {
@@ -105,6 +107,10 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
         connections.get(id)?.close(4001, 'Session ended. Please sign in again.')
     }
     const webRoot = resolve(ROOT, 'web/dist')
+    const staticCache = new Map<
+        string,
+        { body: Buffer; gzip?: Buffer; type: string; etag: string; immutable: boolean }
+    >()
     const mime: Record<string, string> = {
         '.html': 'text/html',
         '.js': 'text/javascript',
@@ -200,9 +206,57 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                 res.end()
                 return
             }
-            const data = await readFile(file)
-            res.writeHead(200, { 'Content-Type': mime[extname(file)] ?? 'application/octet-stream' })
-            res.end(req.method === 'HEAD' ? undefined : data)
+            let cached = staticCache.get(file)
+            if (!cached) {
+                const data = await readFile(file)
+                const type = mime[extname(file)] ?? 'application/octet-stream'
+                const immutable = file.startsWith(resolve(webRoot, 'assets') + sep) && /-[\w-]{8,}\.[\w]+$/.test(file)
+                let gzip: Buffer | undefined
+                if (
+                    data.length > 256 &&
+                    (type.startsWith('text/') ||
+                        type.includes('javascript') ||
+                        type.includes('json') ||
+                        type.includes('css') ||
+                        type.includes('svg'))
+                ) {
+                    try {
+                        gzip = gzipSync(data, { level: 6 })
+                    } catch {
+                        /* Ignore compression errors and fallback to raw buffer */
+                    }
+                }
+                const etag = `W/"${createHash('sha256').update(data).digest('hex')}"`
+                cached = { body: data, gzip, type, etag, immutable }
+                staticCache.set(file, cached)
+            }
+            const cacheHeaders = {
+                ETag: cached.etag,
+                Vary: 'Accept-Encoding',
+                'Cache-Control': cached.immutable ? 'public, max-age=31536000, immutable' : 'no-cache'
+            }
+            const validators = req.headers['if-none-match']?.split(',').map((value) => value.trim()) ?? []
+            if (validators.some((value) => value === '*' || value.replace(/^W\//, '') === cached.etag.replace(/^W\//, ''))) {
+                res.writeHead(304, cacheHeaders)
+                res.end()
+                return
+            }
+            const acceptGzip = Boolean(cached.gzip && req.headers['accept-encoding']?.split(',').some((value) => {
+                const [encoding, ...parameters] = value.trim().toLowerCase().split(';')
+                const quality = parameters.find((parameter) => parameter.trim().startsWith('q='))
+                return encoding === 'gzip' && (!quality || Number(quality.trim().slice(2)) > 0)
+            }))
+            const body = acceptGzip && cached.gzip ? cached.gzip : cached.body
+            const headers: Record<string, string | number> = {
+                'Content-Type': cached.type,
+                'Content-Length': body.length,
+                ...cacheHeaders
+            }
+            if (acceptGzip && cached.gzip) {
+                headers['Content-Encoding'] = 'gzip'
+            }
+            res.writeHead(200, headers)
+            res.end(req.method === 'HEAD' ? undefined : body)
         } catch {
             if (!res.headersSent) {
                 res.writeHead(404)
@@ -266,7 +320,9 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                 office.input(user.id, packet)
             })
             ws.on('close', (code) => {
-                if (code !== 1000 && code !== 1005) console.warn('[office] websocket_closed', { code })
+                if (code !== 1000 && code !== 1005) {
+                    console.warn('[office] websocket_closed', { code })
+                }
                 clearInterval(heartbeat)
                 if (connections.get(user.id) !== ws) {
                     return
@@ -308,9 +364,18 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
         config.tick_rate,
         (dt) => office.tick(dt),
         () => {
-            const packet: Packet = { type: 'state', at: Date.now(), state: office.snapshot() }
+            if (connections.size === 0) {
+                return
+            }
+            const raw = JSON.stringify({ type: 'state', at: Date.now(), state: office.snapshot() })
             for (const socket of connections.values()) {
-                send(socket, packet)
+                if (socket.readyState === WebSocket.OPEN) {
+                    if (socket.bufferedAmount > 500_000) {
+                        socket.close(4008, 'Client too slow')
+                    } else {
+                        socket.send(raw)
+                    }
+                }
             }
         }
     )

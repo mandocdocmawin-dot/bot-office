@@ -38,10 +38,16 @@ export function extractMediaContent(message: PreviewMessage): string | undefined
         return message.cleanContent ?? message.content
     }
     const attachmentUrl = attachment?.url
-    if (attachmentUrl) return attachmentUrl
-    if (directImage) return directImage
+    if (attachmentUrl) {
+        return attachmentUrl
+    }
+    if (directImage) {
+        return directImage
+    }
     const embed = message.embeds?.[0]
-    if (embed) return embed.image?.url || embed.thumbnail?.url || embed.video?.url || embed.url || undefined
+    if (embed) {
+        return embed.image?.url || embed.thumbnail?.url || embed.video?.url || embed.url || undefined
+    }
     return undefined
 }
 

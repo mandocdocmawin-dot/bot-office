@@ -38,6 +38,7 @@ export class GameLoop {
                 this.onBroadcast()
             }
         }, intervalMs)
+        this.timer.unref()
     }
 
     stop(): void {

@@ -73,8 +73,8 @@ export class Office {
                         id,
                         username,
                         avatar,
-                        x,
-                        y,
+                        x: Math.round(x * 10) / 10,
+                        y: Math.round(y * 10) / 10,
                         room,
                         sleeping,
                         moving,
@@ -349,6 +349,10 @@ export class Office {
                 } else {
                     dx = dy = 0
                 }
+            }
+            if (dx === 0 && dy === 0) {
+                p.moving = false
+                continue
             }
             const next = this.world.step(p, dx * this.config.player_speed * dt, dy * this.config.player_speed * dt)
             p.moving = Math.hypot(next.x - p.x, next.y - p.y) > 0.01

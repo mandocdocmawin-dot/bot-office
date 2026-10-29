@@ -56,7 +56,13 @@ function login(error?: string, retryAfterSeconds = 0) {
     const code = new URLSearchParams(location.search).get('login_error') ?? ''
     app.innerHTML = `<main class="login-page"><div class="login-card"><div class="brand"><span class="brand-mark">◉</span>discord office</div><h1>Your people.<br>Your little office.</h1><p>A shared space to work, wander, and hang out with your Discord server.</p><p id="login-error" role="alert"></p><a id="discord-login" class="login-button">Continue with Discord</a><p class="login-privacy">We request only your profile and server list to verify membership. Your display name, avatar, and position appear to people in this office. Room chat disappears after five seconds and is never stored or logged. Log out any time.</p><button class="text-button" id="retry">Refresh connection</button></div><div class="login-art" aria-hidden="true"><span>⌂</span><p>One server. Under one roof.</p></div></main>`
     el('login-error').textContent = error || messages[code] || ''
-    el<HTMLAnchorElement>('discord-login').href = api('/auth/login')
+    const loginLink = el<HTMLAnchorElement>('discord-login')
+    loginLink.href = api('/auth/login')
+    loginLink.onclick = () => {
+        loginLink.textContent = 'Connecting to Discord…'
+        loginLink.style.pointerEvents = 'none'
+        loginLink.style.opacity = '0.7'
+    }
     if (code === 'rate_limited') {
         el('login-error').textContent = 'Discord temporarily limited sign-in requests. You can try signing in again.'
     }
@@ -115,7 +121,17 @@ function office(user: Identity, mock: boolean) {
         backgroundColor: '#09070f',
         scene,
         scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
-        render: { antialias: true },
+        render: {
+            antialias: true,
+            roundPixels: true,
+            powerPreference: 'high-performance',
+            batchSize: 4096,
+            transparent: false
+        },
+        fps: {
+            target: 60,
+            smoothStep: true
+        },
         dom: {
             createContainer: true
         },
@@ -174,20 +190,11 @@ function office(user: Identity, mock: boolean) {
         if (!snapshot) {
             return
         }
-        const key = JSON.stringify(
-            snapshot.members.map((m) => [
-                m.id,
-                m.username,
-                m.avatar,
-                m.room,
-                m.sleeping,
-                m.presence,
-                m.inVoice,
-                m.voiceChannelName,
-                m.muted,
-                m.speaking
-            ])
-        )
+        let key = ''
+        for (let i = 0; i < snapshot.members.length; i++) {
+            const m = snapshot.members[i]
+            key += `${m.id}:${m.username}:${m.avatar}:${m.room}:${m.sleeping ? 1 : 0}:${m.presence}:${m.inVoice ? 1 : 0}:${m.voiceChannelName}:${m.muted ? 1 : 0}:${m.speaking ? 1 : 0};`
+        }
         if (!force && rosterKey === key) {
             return
         }
@@ -499,8 +506,9 @@ function office(user: Identity, mock: boolean) {
                 notice.textContent = packet.message
                 notice.hidden = false
                 setTimeout(() => {
-                    if (socket.readyState === WebSocket.OPEN && notice.textContent === packet.message)
+                    if (socket.readyState === WebSocket.OPEN && notice.textContent === packet.message) {
                         notice.hidden = true
+                    }
                 }, 5000)
                 return
             }
