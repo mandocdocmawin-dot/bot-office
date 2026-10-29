@@ -85,9 +85,12 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
     const auth = new Auth(options, request)
     const mediaLoads = new Map<string, ReturnType<typeof loadMediaImage>>()
     const office = new Office(config, options.mock ? 'mock' : 'multiplayer', async (id, room, text) => {
-        let broadcastText = text
+        let broadcastText: string | null = text
         if (isMediaUrl(text)) {
             broadcastText = await resolveMediaUrl(text)
+            if (!broadcastText) {
+                return
+            }
         }
         for (const [playerId, socket] of connections) {
             if (office.members.get(playerId)?.room === room) {
@@ -142,6 +145,11 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                     return
                 }
                 const resolved = await resolveMediaUrl(target)
+                if (!resolved) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ error: 'Media not found' }))
+                    return
+                }
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({ url: resolved }))
                 return

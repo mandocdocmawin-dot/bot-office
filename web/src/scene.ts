@@ -609,57 +609,57 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     private createMediaBubble(c: Character, url: string, duration: number) {
-        const wrap = document.createElement('div')
-        wrap.className = 'chat-bubble-media'
-        wrap.style.cssText =
-            'pointer-events:none;display:inline-flex;flex-direction:column;align-items:center;line-height:0;'
-
-        const box = document.createElement('div')
-        box.style.cssText =
-            'background:#eee8fa;padding:3px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;box-shadow:0 4px 10px rgba(0,0,0,0.45);'
-
-        const img = document.createElement('img')
-        img.alt = 'Chat media'
-        img.style.cssText =
-            'max-width:76px;max-height:68px;min-width:28px;min-height:28px;border-radius:4px;display:block;object-fit:contain;'
-
-        const arrow = document.createElement('div')
-        arrow.style.cssText =
-            'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #eee8fa;margin-top:-1px;'
-
-        box.append(img)
-        wrap.append(box)
-        wrap.append(arrow)
-
-        const dom = this.add.dom(0, -68, wrap).setOrigin(0.5, 1)
-        dom.pointerEvents = 'none'
-        const unavailable = () => {
-            if (c.bubble === dom) {
-                expiry.remove()
-                console.warn('[office] media_load_failed')
-                dom.destroy()
-                c.bubble = undefined
-                this.createTextBubble(c, 'GIF unavailable', duration)
-            }
-        }
-        let expiry = this.time.delayedCall(12_000, unavailable)
+        const img = new Image()
+        let cancelled = false
 
         img.onload = () => {
-            if (c.bubble === dom) {
-                expiry.remove()
-                dom.updateSize()
-                expiry = this.time.delayedCall(duration, () => {
-                    if (c.bubble === dom) {
-                        dom.destroy()
-                        c.bubble = undefined
-                    }
-                })
+            if (cancelled || !this.people.has(c.member.id)) {
+                return
             }
-        }
-        img.onerror = unavailable
+            if (c.bubble) {
+                c.bubble.destroy()
+                c.bubble = undefined
+            }
 
-        c.root.add(dom)
-        c.bubble = dom
+            const wrap = document.createElement('div')
+            wrap.className = 'chat-bubble-media'
+            wrap.style.cssText =
+                'pointer-events:none;display:inline-flex;flex-direction:column;align-items:center;line-height:0;'
+
+            const box = document.createElement('div')
+            box.style.cssText =
+                'background:#eee8fa;padding:3px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;box-shadow:0 4px 10px rgba(0,0,0,0.45);'
+
+            img.alt = 'Chat media'
+            img.style.cssText =
+                'max-width:76px;max-height:68px;min-width:28px;min-height:28px;border-radius:4px;display:block;object-fit:contain;'
+
+            const arrow = document.createElement('div')
+            arrow.style.cssText =
+                'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #eee8fa;margin-top:-1px;'
+
+            box.append(img)
+            wrap.append(box)
+            wrap.append(arrow)
+
+            const dom = this.add.dom(0, -68, wrap).setOrigin(0.5, 1)
+            dom.pointerEvents = 'none'
+            c.root.add(dom)
+            c.bubble = dom
+
+            this.time.delayedCall(duration, () => {
+                if (c.bubble === dom) {
+                    dom.destroy()
+                    c.bubble = undefined
+                }
+            })
+        }
+
+        img.onerror = () => {
+            cancelled = true
+            console.warn('[office] media_load_failed')
+        }
+
         // Keep the image on the Activity origin so Discord's CSP allows it.
         img.src = `/api/media/image?url=${encodeURIComponent(url)}`
     }

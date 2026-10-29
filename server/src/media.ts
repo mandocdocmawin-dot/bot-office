@@ -119,10 +119,13 @@ export async function readMediaBody(response: Response, limit: number): Promise<
     return Buffer.concat(chunks, size)
 }
 
-export async function resolveMediaUrl(rawUrl: string, request: typeof fetch = fetch): Promise<string> {
+export async function resolveMediaUrl(rawUrl: string, request: typeof fetch = fetch): Promise<string | null> {
     const url = rawUrl.trim()
     const parsed = mediaProviderUrl(url)
-    if (!parsed || imagePath.test(parsed.pathname)) {
+    if (!parsed) {
+        return null
+    }
+    if (imagePath.test(parsed.pathname)) {
         return url
     }
     const cached = cache.get(url)
@@ -141,7 +144,7 @@ export async function resolveMediaUrl(rawUrl: string, request: typeof fetch = fe
             parsed.hostname
         )
     ) {
-        return url
+        return null
     }
     try {
         const response = await fetchMediaResponse(url, request)
@@ -159,14 +162,18 @@ export async function resolveMediaUrl(rawUrl: string, request: typeof fetch = fe
     } catch {
         /* The image route reports failure without disrupting the office. */
     }
-    return url
+    return null
 }
 
 export async function loadMediaImage(rawUrl: string, request: typeof fetch = fetch) {
     if (!mediaProviderUrl(rawUrl)) {
         throw new Error('Unsupported media provider')
     }
-    const response = await fetchMediaResponse(await resolveMediaUrl(rawUrl, request), request)
+    const target = await resolveMediaUrl(rawUrl, request)
+    if (!target) {
+        throw new Error('Could not resolve media image')
+    }
+    const response = await fetchMediaResponse(target, request)
     const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? ''
     if (!imageTypes.has(type)) {
         await response.body?.cancel()

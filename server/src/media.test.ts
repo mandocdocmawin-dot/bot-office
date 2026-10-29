@@ -45,6 +45,11 @@ describe('media resolution', () => {
         }
     })
 
+    it('returns null when page HTML snippet has no media image', async () => {
+        const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('<html>no image here</html>'))
+        expect(await resolveMediaUrl('https://tenor.com/view/empty-12345', request)).toBeNull()
+    })
+
     it('returns GIF bytes and MIME type without forwarding office cookies', async () => {
         const gif = Buffer.from('GIF89a')
         const request = vi
