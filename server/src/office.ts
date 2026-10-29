@@ -1,17 +1,18 @@
 import type { Config } from './config.js'
-import type {
-    ClientPacket,
-    DiscordStatus,
-    Identity,
-    Member,
-    Point,
-    Room,
-    Snapshot,
-    VoiceMonitorStatus
+import {
+    type ClientPacket,
+    type DiscordStatus,
+    type Identity,
+    type Member,
+    type Point,
+    type Room,
+    type Snapshot,
+    type VoiceMonitorStatus,
+    isCharacterStyle,
+    type CharacterStyle
 } from './protocol.js'
 import { World } from './world.js'
 import { isMediaUrl } from './media.js'
-import { isCharacterStyle, type CharacterStyle } from './protocol.js'
 
 interface Player extends Member {
     lastInput: number

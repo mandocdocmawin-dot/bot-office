@@ -146,7 +146,7 @@ export class OfficeScene extends Phaser.Scene {
         beacon.fillStyle(0x64_e3_d3, 0.06).fillEllipse(hub.x, hub.y, 110, 55)
         slab(beacon, 468, 490, 35, 35, 15, 15, 0x39_38_4d)
         beacon.fillStyle(0x7d_e7_db, 0.13).fillCircle(hub.x, hub.y - 40, 30)
-        beacon.fillStyle(0x73d6d1).fillCircle(hub.x, hub.y - 40, 19)
+        beacon.fillStyle(0x73_d6_d1).fillCircle(hub.x, hub.y - 40, 19)
         beacon.fillStyle(0xb8fff0).fillEllipse(hub.x - 6, hub.y - 47, 10, 12)
         this.fit()
         const resize = () => this.resizeView()
@@ -483,8 +483,11 @@ export class OfficeScene extends Phaser.Scene {
     private makeCharacter(m: Member, x: number, y: number): Character {
         const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
         const robot = robotStyle(m.character)
-        const shirt = robot?.shirt ?? [0x77_cc_bb, 0xb2_96_dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
-        const root = this.add.container(x, y).setSize(32, 64).setDepth(1000 + Math.round(y))
+        const shirt = robot?.shirt ?? [0x77_cc_bb, 0xb2_96_dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78_ae_e0, 0xab_a6_ed][seed % 6]
+        const root = this.add
+            .container(x, y)
+            .setSize(32, 64)
+            .setDepth(1000 + Math.round(y))
         const shadow = this.add.ellipse(0, 0, 33, 14, 0x02_03_08, 0.5)
         const body = this.add.container(0, 0)
         const person = this.add.graphics()
@@ -508,29 +511,49 @@ export class OfficeScene extends Phaser.Scene {
             ])
         const legs: Character['legs'] = [leg(-6), leg(7)]
         const arm = (x: number, y: number) =>
-            this.add.container(x, y, robot ? [
-                this.add.rectangle(0, 0, 7, 9, shirt).setOrigin(0.5, 0),
-                this.add.rectangle(0, 9, 6, 5, m.character === 'pink' || m.character === 'lavender' ? robot.shell : robot.limbs).setOrigin(0.5, 0)
-            ] : [this.add.rectangle(0, 0, 6, 14, 0xc6_a3_8a).setOrigin(0.5, 0)])
+            this.add.container(
+                x,
+                y,
+                robot
+                    ? [
+                          this.add.rectangle(0, 0, 7, 9, shirt).setOrigin(0.5, 0),
+                          this.add
+                              .rectangle(
+                                  0,
+                                  9,
+                                  6,
+                                  5,
+                                  m.character === 'pink' || m.character === 'lavender' ? robot.shell : robot.limbs
+                              )
+                              .setOrigin(0.5, 0)
+                      ]
+                    : [this.add.rectangle(0, 0, 6, 14, 0xc6_a3_8a).setOrigin(0.5, 0)]
+            )
         const arms: Character['arms'] = [arm(-14, -29), arm(14, -27)]
         const head = this.add.circle(0, -44, 15, 0x44_41_59).setStrokeStyle(2, 0xc7c0dc)
         head.setVisible(!robot)
         const robotHead = this.add.graphics()
         if (robot) {
-            robotHead.fillStyle(Phaser.Display.Color.IntegerToColor(robot.shell).darken(15).color).fillRect(12, -60, 6, 29)
+            robotHead
+                .fillStyle(Phaser.Display.Color.IntegerToColor(robot.shell).darken(15).color)
+                .fillRect(12, -60, 6, 29)
             robotHead.fillStyle(robot.shell).fillRoundedRect(-17, -62, 31, 30, 3)
-            robotHead.fillStyle(0x242638).fillRoundedRect(-13, -58, 23, 22, 2)
+            robotHead.fillStyle(0x24_26_38).fillRoundedRect(-13, -58, 23, 22, 2)
             robotHead.fillStyle(robot.eyes).fillRect(-9, -52, 5, 7).fillRect(2, -52, 5, 7)
             if (m.character !== 'blue' && m.character !== 'orange') {
                 robotHead.fillRect(-4, -41, 7, 2)
             }
             if (m.character === 'pink') {
-                robotHead.fillStyle(0x7fdeb7).fillRect(-21, -55, 5, 17).fillRect(15, -55, 6, 17).fillRect(-17, -65, 35, 4)
-                robotHead.fillStyle(0x303244).fillRect(15, -39, 3, 7).fillRect(5, -34, 12, 3)
+                robotHead
+                    .fillStyle(0x7fdeb7)
+                    .fillRect(-21, -55, 5, 17)
+                    .fillRect(15, -55, 6, 17)
+                    .fillRect(-17, -65, 35, 4)
+                robotHead.fillStyle(0x30_32_44).fillRect(15, -39, 3, 7).fillRect(5, -34, 12, 3)
                 robotHead.fillStyle(0x7fdeb7).fillRect(3, -36, 5, 5)
             } else if (m.character === 'mint') {
                 robotHead.fillStyle(0x244c4e).fillRect(6, -70, 3, 8)
-                robotHead.fillStyle(0x79c9a2).fillRect(4, -74, 7, 5)
+                robotHead.fillStyle(0x79_c9_a2).fillRect(4, -74, 7, 5)
             } else {
                 robotHead.fillStyle(shirt).fillRect(-21, -54, 5, 14).fillRect(16, -54, 5, 14)
             }
@@ -725,7 +748,7 @@ export class OfficeScene extends Phaser.Scene {
                 this.createTextBubble(c, 'GIF unavailable', duration)
             }
         }
-        let expiry = this.time.delayedCall(12000, unavailable)
+        let expiry = this.time.delayedCall(12_000, unavailable)
 
         img.onload = () => {
             if (c.bubble === dom) {

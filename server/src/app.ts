@@ -240,16 +240,23 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                 'Cache-Control': cached.immutable ? 'public, max-age=31536000, immutable' : 'no-cache'
             }
             const validators = req.headers['if-none-match']?.split(',').map((value) => value.trim()) ?? []
-            if (validators.some((value) => value === '*' || value.replace(/^W\//, '') === cached.etag.replace(/^W\//, ''))) {
+            if (
+                validators.some(
+                    (value) => value === '*' || value.replace(/^W\//, '') === cached.etag.replace(/^W\//, '')
+                )
+            ) {
                 res.writeHead(304, cacheHeaders)
                 res.end()
                 return
             }
-            const acceptGzip = Boolean(cached.gzip && req.headers['accept-encoding']?.split(',').some((value) => {
-                const [encoding, ...parameters] = value.trim().toLowerCase().split(';')
-                const quality = parameters.find((parameter) => parameter.trim().startsWith('q='))
-                return encoding === 'gzip' && (!quality || Number(quality.trim().slice(2)) > 0)
-            }))
+            const acceptGzip = Boolean(
+                cached.gzip &&
+                req.headers['accept-encoding']?.split(',').some((value) => {
+                    const [encoding, ...parameters] = value.trim().toLowerCase().split(';')
+                    const quality = parameters.find((parameter) => parameter.trim().startsWith('q='))
+                    return encoding === 'gzip' && (!quality || Number(quality.trim().slice(2)) > 0)
+                })
+            )
             const body = acceptGzip && cached.gzip ? cached.gzip : cached.body
             const headers: Record<string, string | number> = {
                 'Content-Type': cached.type,

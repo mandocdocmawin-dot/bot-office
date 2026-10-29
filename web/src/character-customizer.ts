@@ -1,4 +1,5 @@
-import { isCharacterStyle, type CharacterStyle, type ClientPacket, type Member } from '@office/shared/protocol'
+import { isCharacterStyle } from '@office/shared/protocol'
+import type { CharacterStyle, ClientPacket, Member } from '@office/shared/protocol'
 import { characterImage, characterStyles } from './character-styles'
 
 export function createCharacterCustomizer(send: (packet: ClientPacket) => boolean, stopMovement: () => void) {
@@ -61,13 +62,25 @@ export function createCharacterCustomizer(send: (packet: ClientPacket) => boolea
         const description = document.createElement('span')
         description.textContent = style.description
         button.append(label, description)
-        button.onclick = () => { if (!pending) choose(style.id) }
+        button.onclick = () => {
+            if (!pending) {
+                choose(style.id)
+            }
+        }
         options.append(button)
     }
-    const close = () => { if (!pending) dialog.close() }
+    const close = () => {
+        if (!pending) {
+            dialog.close()
+        }
+    }
     dialog.querySelector<HTMLButtonElement>('.icon-button')!.onclick = close
     dialog.querySelector<HTMLButtonElement>('[data-action="cancel"]')!.onclick = close
-    dialog.addEventListener('cancel', (event) => { if (pending) event.preventDefault() })
+    dialog.addEventListener('cancel', (event) => {
+        if (pending) {
+            event.preventDefault()
+        }
+    })
     dialog.addEventListener('close', () => {
         document.querySelector<HTMLButtonElement>('.customize-self')?.focus()
     })
@@ -90,9 +103,13 @@ export function createCharacterCustomizer(send: (packet: ClientPacket) => boolea
         }, 6000)
     }
     return {
-        get open() { return dialog.open },
+        get open() {
+            return dialog.open
+        },
         show() {
-            if (!self || dialog.open) return
+            if (!self || dialog.open) {
+                return
+            }
             stopMovement()
             choose(self.character ?? 'default')
             const original = dialog.querySelector<HTMLImageElement>('[data-original]')!
@@ -100,11 +117,16 @@ export function createCharacterCustomizer(send: (packet: ClientPacket) => boolea
             dialog.showModal()
             options.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus()
         },
-        disconnected() { ready = false; restored = false },
+        disconnected() {
+            ready = false
+            restored = false
+        },
         update(member: Member | undefined, initial: boolean) {
             self = member
             ready = Boolean(member)
-            if (!member) return
+            if (!member) {
+                return
+            }
             if (initial && !restored) {
                 restored = true
                 try {
@@ -112,10 +134,16 @@ export function createCharacterCustomizer(send: (packet: ClientPacket) => boolea
                     if (isCharacterStyle(saved) && saved !== (member.character ?? 'default')) {
                         send({ type: 'character', style: saved })
                     }
-                } catch { /* Customization still works when browser storage is unavailable. */ }
+                } catch {
+                    /* Customization still works when browser storage is unavailable. */
+                }
             }
             if (pending && member.character === pending) {
-                try { localStorage.setItem(storageKey(), pending) } catch { /* Keep the live look. */ }
+                try {
+                    localStorage.setItem(storageKey(), pending)
+                } catch {
+                    /* Keep the live look. */
+                }
                 finishPending()
                 dialog.close()
             }

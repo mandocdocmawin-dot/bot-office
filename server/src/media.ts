@@ -21,7 +21,9 @@ export function mediaProviderUrl(value: string): URL | undefined {
             /^images-ext-\d+\.discordapp\.net$/.test(host) ||
             /^(?:media\d*|c)\.tenor\.com$/.test(host) ||
             /^(?:static\d*|media\d*)\.klipy\.com$/.test(host)
-        if (allowed && url.protocol === 'https:' && !url.username && !url.password && !url.port) return url
+        if (allowed && url.protocol === 'https:' && !url.username && !url.password && !url.port) {
+            return url
+        }
     } catch {
         /* Unsupported or malformed media URL. */
     }
@@ -31,10 +33,16 @@ export function mediaProviderUrl(value: string): URL | undefined {
 export function isMediaUrl(text: string): boolean {
     try {
         const url = new URL(text.trim())
-        if (!['http:', 'https:'].includes(url.protocol)) return false
-        if (imagePath.test(url.pathname)) return true
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            return false
+        }
+        if (imagePath.test(url.pathname)) {
+            return true
+        }
         const provider = mediaProviderUrl(url.href)
-        if (!provider) return false
+        if (!provider) {
+            return false
+        }
         return (
             /\/(gifs|stickers|view)\//.test(provider.pathname) ||
             /^(media\d*|static\d*)\./.test(provider.hostname) ||
@@ -51,7 +59,9 @@ export async function fetchMediaResponse(rawUrl: string, request: typeof fetch =
     const signal = AbortSignal.timeout(8000)
     for (let hop = 0; hop <= 3; hop++) {
         const url = mediaProviderUrl(target)
-        if (!url) throw new Error('Unsupported media provider')
+        if (!url) {
+            throw new Error('Unsupported media provider')
+        }
         const response = await request(url.href, {
             redirect: 'manual',
             signal,
@@ -63,7 +73,9 @@ export async function fetchMediaResponse(rawUrl: string, request: typeof fetch =
         if ([301, 302, 303, 307, 308].includes(response.status)) {
             const location = response.headers.get('location')
             await response.body?.cancel()
-            if (!location) throw new Error('Invalid media redirect')
+            if (!location) {
+                throw new Error('Invalid media redirect')
+            }
             target = new URL(location, url).href
             continue
         }
@@ -81,16 +93,22 @@ export async function readMediaBody(response: Response, limit: number): Promise<
         await response.body?.cancel()
         throw new Error('Media response too large')
     }
-    if (!response.body) throw new Error('Empty media response')
+    if (!response.body) {
+        throw new Error('Empty media response')
+    }
     const reader = response.body.getReader()
     const chunks: Uint8Array[] = []
     let size = 0
     try {
         while (true) {
             const result = await reader.read()
-            if (result.done) break
+            if (result.done) {
+                break
+            }
             size += result.value.byteLength
-            if (size > limit) throw new Error('Media response too large')
+            if (size > limit) {
+                throw new Error('Media response too large')
+            }
             chunks.push(result.value)
         }
     } catch (error) {
@@ -105,20 +123,27 @@ export async function readMediaBody(response: Response, limit: number): Promise<
 export async function resolveMediaUrl(rawUrl: string, request: typeof fetch = fetch): Promise<string> {
     const url = rawUrl.trim()
     const parsed = mediaProviderUrl(url)
-    if (!parsed || imagePath.test(parsed.pathname)) return url
+    if (!parsed || imagePath.test(parsed.pathname)) {
+        return url
+    }
     const cached = cache.get(url)
-    if (cached) return cached
+    if (cached) {
+        return cached
+    }
     // Use the public Giphy id without waiting for a large HTML page.
     if (['giphy.com', 'www.giphy.com'].includes(parsed.hostname) && parsed.pathname.startsWith('/gifs/')) {
         const id = parsed.pathname.replace(/\/$/, '').split('/').at(-1)?.split('-').at(-1)
-        if (id && /^[a-zA-Z0-9]{6,}$/.test(id)) return remember(url, `https://media.giphy.com/media/${id}/giphy.gif`)
+        if (id && /^[a-zA-Z0-9]{6,}$/.test(id)) {
+            return remember(url, `https://media.giphy.com/media/${id}/giphy.gif`)
+        }
     }
     if (
         !['klipy.com', 'www.klipy.com', 'tenor.com', 'www.tenor.com', 'giphy.com', 'www.giphy.com'].includes(
             parsed.hostname
         )
-    )
+    ) {
         return url
+    }
     try {
         const response = await fetchMediaResponse(url, request)
         const html = (await readMediaBody(response, 1024 * 1024)).toString('utf8')
@@ -129,7 +154,9 @@ export async function resolveMediaUrl(rawUrl: string, request: typeof fetch = fe
             html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i)?.[1] ??
             html.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i)?.[1]
         const candidate = (direct ?? og)?.replaceAll('&amp;', '&')
-        if (candidate && mediaProviderUrl(candidate)) return remember(url, candidate)
+        if (candidate && mediaProviderUrl(candidate)) {
+            return remember(url, candidate)
+        }
     } catch {
         /* The image route reports failure without disrupting the office. */
     }
@@ -137,7 +164,9 @@ export async function resolveMediaUrl(rawUrl: string, request: typeof fetch = fe
 }
 
 export async function loadMediaImage(rawUrl: string, request: typeof fetch = fetch) {
-    if (!mediaProviderUrl(rawUrl)) throw new Error('Unsupported media provider')
+    if (!mediaProviderUrl(rawUrl)) {
+        throw new Error('Unsupported media provider')
+    }
     const response = await fetchMediaResponse(await resolveMediaUrl(rawUrl, request), request)
     const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? ''
     if (!imageTypes.has(type)) {
@@ -148,7 +177,9 @@ export async function loadMediaImage(rawUrl: string, request: typeof fetch = fet
 }
 
 function remember(key: string, value: string) {
-    if (cache.size >= 200) cache.clear()
+    if (cache.size >= 200) {
+        cache.clear()
+    }
     cache.set(key, value)
     return value
 }

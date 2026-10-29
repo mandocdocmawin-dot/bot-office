@@ -686,7 +686,10 @@ dialog code {
     cursor: pointer;
     flex-shrink: 0;
 }
-.customize-self:hover { outline: 2px solid #b5bdff; outline-offset: 2px; }
+.customize-self:hover {
+    outline: 2px solid #b5bdff;
+    outline-offset: 2px;
+}
 button.member-info {
     padding: 6px 0;
     border: 0;
@@ -697,13 +700,38 @@ button.member-info {
     min-width: 0;
     flex: 1;
 }
-.member-topline { display: flex; gap: 6px; align-items: center; }
-.member-tag { color: #bdc5fa; font-size: 10px; }
-#character-dialog { max-width: 660px; max-height: calc(100dvh - 32px); overflow-y: auto; }
-.character-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.character-heading h2 { margin: 0; }
-.character-intro { margin: 12px 0 24px; line-height: 1.6; }
-.character-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.member-topline {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.member-tag {
+    color: #bdc5fa;
+    font-size: 10px;
+}
+#character-dialog {
+    max-width: 660px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+}
+.character-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+.character-heading h2 {
+    margin: 0;
+}
+.character-intro {
+    margin: 12px 0 24px;
+    line-height: 1.6;
+}
+.character-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
 .character-option {
     min-width: 0;
     padding: 0 0 12px;
@@ -715,23 +743,83 @@ button.member-info {
     overflow: hidden;
     text-align: left;
 }
-.character-option:hover { border-color: #a6b2d3; }
-.character-option[aria-pressed="true"] { border-color: #bdc5ff; background: #303852; }
-.character-option > img, .character-original { display: block; width: 100%; height: clamp(96px, 18vh, 150px); object-fit: contain; background: #43455f; }
-.character-original { display: grid; place-items: center; background: #43455f; }
-.character-original img { width: 48%; border-radius: 50%; }
-.character-option strong, .character-option > span { display: block; margin: 10px 10px 0; }
-.character-option strong { font-size: 13px; }
-.character-option > span { font-size: 11px; line-height: 1.5; color: #bdc8dd; }
-.character-actions { display: flex; justify-content: flex-end; gap: 20px; align-items: center; margin-top: 16px; }
-.character-save { padding: 11px 18px; border: 0; border-radius: 6px; color: #151b2d; background: #bdc5ff; font-weight: 600; cursor: pointer; }
-.character-save:hover { background: #d1d6ff; }
-.character-save:disabled { opacity: .65; cursor: wait; }
-#character-dialog .character-note { font-size: 12px; line-height: 1.6; margin-top: 20px; }
-#character-dialog .character-feedback { min-height: 20px; font-size: 13px; color: #f1d491; }
+.character-option:hover {
+    border-color: #a6b2d3;
+}
+.character-option[aria-pressed='true'] {
+    border-color: #bdc5ff;
+    background: #303852;
+}
+.character-option > img,
+.character-original {
+    display: block;
+    width: 100%;
+    height: clamp(96px, 18vh, 150px);
+    object-fit: contain;
+    background: #43455f;
+}
+.character-original {
+    display: grid;
+    place-items: center;
+    background: #43455f;
+}
+.character-original img {
+    width: 48%;
+    border-radius: 50%;
+}
+.character-option strong,
+.character-option > span {
+    display: block;
+    margin: 10px 10px 0;
+}
+.character-option strong {
+    font-size: 13px;
+}
+.character-option > span {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #bdc8dd;
+}
+.character-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 20px;
+    align-items: center;
+    margin-top: 16px;
+}
+.character-save {
+    padding: 11px 18px;
+    border: 0;
+    border-radius: 6px;
+    color: #151b2d;
+    background: #bdc5ff;
+    font-weight: 600;
+    cursor: pointer;
+}
+.character-save:hover {
+    background: #d1d6ff;
+}
+.character-save:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+#character-dialog .character-note {
+    font-size: 12px;
+    line-height: 1.6;
+    margin-top: 20px;
+}
+#character-dialog .character-feedback {
+    min-height: 20px;
+    font-size: 13px;
+    color: #f1d491;
+}
 @media (max-width: 520px) {
-    #character-dialog { padding: 20px; }
-    .character-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #character-dialog {
+        padding: 20px;
+    }
+    .character-options {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 .member-row {
     border: 0;

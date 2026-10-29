@@ -456,7 +456,9 @@ function office(user: Identity, mock: boolean) {
         const typing = ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable
         const key = event.key.toLowerCase()
         const moveKey = movementKey(event)
-        if (customizer.open) return
+        if (customizer.open) {
+            return
+        }
         if (key === 'escape') {
             closeChat()
             document.querySelector('.map-shell')!.classList.remove('expanded')
@@ -464,7 +466,14 @@ function office(user: Identity, mock: boolean) {
             return
         }
         const activatingControl = Boolean(target.closest('button, a')) && (key === 'enter' || key === ' ')
-        if (typing || activatingControl || el<HTMLDialogElement>('help-dialog').open || event.ctrlKey || event.metaKey || event.altKey) {
+        if (
+            typing ||
+            activatingControl ||
+            el<HTMLDialogElement>('help-dialog').open ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.altKey
+        ) {
             return
         }
         if (discordControlled()) {
@@ -575,7 +584,10 @@ function office(user: Identity, mock: boolean) {
                 selfId = packet.selfId
                 scene.setSelf(selfId)
             }
-            customizer.update(snapshot.members.find((m) => m.id === selfId), packet.type === 'snapshot')
+            customizer.update(
+                snapshot.members.find((m) => m.id === selfId),
+                packet.type === 'snapshot'
+            )
             scene.sync(snapshot)
             renderRoster()
             bubbleControl()
