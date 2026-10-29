@@ -155,14 +155,32 @@ function office(user: Identity, mock: boolean) {
     const activitySignal = createActivitySignal(() => send({ type: 'wake' }))
     const activitySpeaking = new ActivitySpeaking()
     let activityVoice = false
-    function setRosterSpeaking(id: string, active: boolean) {
-        const row = el('roster').querySelector<HTMLElement>(`[data-member-id="${id}"]`)
+    function setRosterSpeaking(member: Snapshot['members'][number]) {
+        const row = el('roster').querySelector<HTMLElement>(`[data-member-id="${CSS.escape(member.id)}"]`)
         if (row) {
-            row.querySelector('.member-avatar')?.classList.toggle('speaking-avatar', active)
-            const state = row.querySelector('.member-state')
+            row.querySelector('.member-avatar')?.classList.toggle('speaking-avatar', Boolean(member.speaking))
+            const state = row.querySelector<HTMLElement>('.member-state')
             if (state) {
-                state.classList.toggle('speaking', active)
+                renderMemberState(state, member)
             }
+        }
+    }
+    function renderMemberState(state: HTMLElement, member: Snapshot['members'][number]) {
+        state.classList.toggle('speaking', Boolean(member.speaking))
+        if (member.speaking) {
+            const wave = document.createElement('span')
+            wave.className = 'speaking-wave'
+            wave.setAttribute('aria-hidden', 'true')
+            for (let i = 0; i < 3; i++) wave.append(document.createElement('span'))
+            state.replaceChildren(wave, document.createTextNode(` Speaking in ${member.voiceChannelName ?? 'voice'}`))
+        } else if (member.inVoice) {
+            state.textContent = `${member.muted ? 'Muted' : 'Connected'} · ${member.voiceChannelName ?? 'voice'}`
+        } else if (member.sleeping) {
+            state.textContent = 'Napping in office'
+        } else if (member.presence && member.presence !== 'offline') {
+            state.textContent = `${member.presence} on Discord`
+        } else {
+            state.textContent = 'Quiet at desk'
         }
     }
     if (inActivity && !mock) {
@@ -171,8 +189,15 @@ function office(user: Identity, mock: boolean) {
                 return
             }
             activitySpeaking.set(id, active, channelId)
-            scene.setSpeaking(id, active)
-            setRosterSpeaking(id, active)
+            if (serverSnapshot && socket?.readyState === WebSocket.OPEN) {
+                const members = activitySpeaking.apply(serverSnapshot.members)
+                snapshot = { ...serverSnapshot, members }
+                const member = members.find((member) => member.id === id)
+                if (member) {
+                    scene.setSpeaking(id, Boolean(member.speaking))
+                    setRosterSpeaking(member)
+                }
+            }
         })
             .then((cleanup) => {
                 activityVoice = true
@@ -294,18 +319,7 @@ function office(user: Identity, mock: boolean) {
                 }
                 const state = document.createElement('div')
                 state.className = 'member-state'
-                if (member.speaking) {
-                    state.classList.add('speaking')
-                    state.innerHTML = `<span class="speaking-wave" aria-hidden="true"><span></span><span></span><span></span></span> Speaking in ${member.voiceChannelName ?? 'voice'}`
-                } else if (member.inVoice) {
-                    state.textContent = `${member.muted ? 'Muted' : 'Connected'} · ${member.voiceChannelName ?? 'voice'}`
-                } else if (member.sleeping) {
-                    state.textContent = 'Napping in office'
-                } else if (member.presence && member.presence !== 'offline') {
-                    state.textContent = `${member.presence} on Discord`
-                } else {
-                    state.textContent = 'Quiet at desk'
-                }
+                renderMemberState(state, member)
                 text.append(top, state)
                 if (member.id === selfId) {
                     const customize = document.createElement('button')
@@ -525,7 +539,7 @@ function office(user: Identity, mock: boolean) {
         }
     }
     setInterval(triggerHeartbeat, 70)
-    scene.events.on('update', triggerHeartbeat)
+    scene.onFrame = triggerHeartbeat
     function connect() {
         if (stopped) {
             return
