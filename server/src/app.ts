@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -85,12 +86,9 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
     const auth = new Auth(options, request)
     const mediaLoads = new Map<string, ReturnType<typeof loadMediaImage>>()
     const office = new Office(config, options.mock ? 'mock' : 'multiplayer', async (id, room, text) => {
-        let broadcastText: string | null = text
+        let broadcastText = text
         if (isMediaUrl(text)) {
             broadcastText = await resolveMediaUrl(text)
-            if (!broadcastText) {
-                return
-            }
         }
         for (const [playerId, socket] of connections) {
             if (office.members.get(playerId)?.room === room) {
@@ -145,11 +143,6 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                     return
                 }
                 const resolved = await resolveMediaUrl(target)
-                if (!resolved) {
-                    res.writeHead(404, { 'Content-Type': 'application/json' })
-                    res.end(JSON.stringify({ error: 'Media not found' }))
-                    return
-                }
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({ url: resolved }))
                 return
@@ -217,7 +210,7 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
             if (!cached) {
                 const data = await readFile(file)
                 const type = mime[extname(file)] ?? 'application/octet-stream'
-                const immutable = url.pathname.startsWith('/assets/')
+                const immutable = file.startsWith(resolve(webRoot, 'assets') + sep) && /-[\w-]{8,}\.[\w]+$/.test(file)
                 let gzip: Buffer | undefined
                 if (
                     data.length > 256 &&
@@ -233,22 +226,31 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
                         /* Ignore compression errors and fallback to raw buffer */
                     }
                 }
-                const etag = `"${data.length.toString(16)}-${data.subarray(0, 16).toString('hex')}"`
+                const etag = `W/"${createHash('sha256').update(data).digest('hex')}"`
                 cached = { body: data, gzip, type, etag, immutable }
                 staticCache.set(file, cached)
             }
-            if (req.headers['if-none-match'] === cached.etag) {
-                res.writeHead(304)
+            const cacheHeaders = {
+                ETag: cached.etag,
+                Vary: 'Accept-Encoding',
+                'Cache-Control': cached.immutable ? 'public, max-age=31536000, immutable' : 'no-cache'
+            }
+            const validators = req.headers['if-none-match']?.split(',').map((value) => value.trim()) ?? []
+            if (validators.some((value) => value === '*' || value.replace(/^W\//, '') === cached.etag.replace(/^W\//, ''))) {
+                res.writeHead(304, cacheHeaders)
                 res.end()
                 return
             }
-            const acceptGzip = Boolean(cached.gzip && req.headers['accept-encoding']?.includes('gzip'))
+            const acceptGzip = Boolean(cached.gzip && req.headers['accept-encoding']?.split(',').some((value) => {
+                const [encoding, ...parameters] = value.trim().toLowerCase().split(';')
+                const quality = parameters.find((parameter) => parameter.trim().startsWith('q='))
+                return encoding === 'gzip' && (!quality || Number(quality.trim().slice(2)) > 0)
+            }))
             const body = acceptGzip && cached.gzip ? cached.gzip : cached.body
             const headers: Record<string, string | number> = {
                 'Content-Type': cached.type,
                 'Content-Length': body.length,
-                ETag: cached.etag,
-                'Cache-Control': cached.immutable ? 'public, max-age=31536000, immutable' : 'no-cache'
+                ...cacheHeaders
             }
             if (acceptGzip && cached.gzip) {
                 headers['Content-Encoding'] = 'gzip'

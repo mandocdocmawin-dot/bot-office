@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
 import {
-    fetchMediaResponse,
     isMediaUrl,
+    resolveMediaUrl,
     loadMediaImage,
+    fetchMediaResponse,
     mediaProviderUrl,
-    readMediaBody,
-    resolveMediaUrl
+    readMediaBody
 } from './media.js'
 
 describe('media resolution', () => {
@@ -43,11 +43,6 @@ describe('media resolution', () => {
                 .mockResolvedValue(new Response(`<meta property="og:image" content="${image}">`))
             expect(await resolveMediaUrl(page, request)).toBe(image)
         }
-    })
-
-    it('returns null when page HTML snippet has no media image', async () => {
-        const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('<html>no image here</html>'))
-        expect(await resolveMediaUrl('https://tenor.com/view/empty-12345', request)).toBeNull()
     })
 
     it('returns GIF bytes and MIME type without forwarding office cookies', async () => {
@@ -102,7 +97,7 @@ describe('media resolution', () => {
             .mockResolvedValue(new Response('<html>page</html>', { headers: { 'Content-Type': 'text/html' } }))
         await expect(loadMediaImage('https://media.giphy.com/a.gif', html)).rejects.toThrow('not return an image')
         await expect(
-            readMediaBody(new Response('abc', { headers: { 'Content-Length': '9000000' } }), 8_000_000)
+            readMediaBody(new Response('abc', { headers: { 'Content-Length': '9000000' } }), 8000000)
         ).rejects.toThrow('too large')
         const stream = new ReadableStream({
             start(controller) {

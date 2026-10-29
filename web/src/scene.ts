@@ -321,6 +321,9 @@ export class OfficeScene extends Phaser.Scene {
                     c.body.y = Math.sin(time / 95) * 1.5
                     c.body.angle = Math.sin(time / 160) * 1.2
                 }
+            } else if (!walking) {
+                c.body.y = 0
+                c.body.angle = 0
             }
         }
     }
@@ -471,7 +474,7 @@ export class OfficeScene extends Phaser.Scene {
     private makeCharacter(m: Member, x: number, y: number): Character {
         const seed = [...m.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
         const shirt = [0x77_cc_bb, 0xb2_96_dc, 0xdc_8c_a9, 0xd6_b8_7d, 0x78aee0, 0xab_a6_ed][seed % 6]
-        const root = this.add.container(x, y).setSize(32, 64)
+        const root = this.add.container(x, y).setSize(32, 64).setDepth(1000 + Math.round(y))
         const shadow = this.add.ellipse(0, 0, 33, 14, 0x02_03_08, 0.5)
         const body = this.add.container(0, 0)
         const person = this.add.graphics()
@@ -548,7 +551,7 @@ export class OfficeScene extends Phaser.Scene {
             voiceName,
             legs,
             arms,
-            depth: 1000 + y
+            depth: 1000 + Math.round(y)
         }
         this.loadAvatar(c, m)
         return c
@@ -639,57 +642,57 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     private createMediaBubble(c: Character, url: string, duration: number) {
-        const img = new Image()
-        let cancelled = false
+        const wrap = document.createElement('div')
+        wrap.className = 'chat-bubble-media'
+        wrap.style.cssText =
+            'pointer-events:none;display:inline-flex;flex-direction:column;align-items:center;line-height:0;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.45));'
+
+        const box = document.createElement('div')
+        box.style.cssText =
+            'background:#eee8fa;padding:3px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'
+
+        const img = document.createElement('img')
+        img.alt = 'Chat media'
+        img.style.cssText =
+            'max-width:76px;max-height:68px;min-width:28px;min-height:28px;border-radius:4px;display:block;object-fit:contain;'
+
+        const arrow = document.createElement('div')
+        arrow.style.cssText =
+            'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #eee8fa;margin-top:-1px;'
+
+        box.append(img)
+        wrap.append(box)
+        wrap.append(arrow)
+
+        const dom = this.add.dom(0, -68, wrap).setOrigin(0.5, 1)
+        dom.pointerEvents = 'none'
+        const unavailable = () => {
+            if (c.bubble === dom) {
+                expiry.remove()
+                console.warn('[office] media_load_failed')
+                dom.destroy()
+                c.bubble = undefined
+                this.createTextBubble(c, 'GIF unavailable', duration)
+            }
+        }
+        let expiry = this.time.delayedCall(12000, unavailable)
 
         img.onload = () => {
-            if (cancelled || !this.people.has(c.member.id)) {
-                return
+            if (c.bubble === dom) {
+                expiry.remove()
+                dom.updateSize()
+                expiry = this.time.delayedCall(duration, () => {
+                    if (c.bubble === dom) {
+                        dom.destroy()
+                        c.bubble = undefined
+                    }
+                })
             }
-            if (c.bubble) {
-                c.bubble.destroy()
-                c.bubble = undefined
-            }
-
-            const wrap = document.createElement('div')
-            wrap.className = 'chat-bubble-media'
-            wrap.style.cssText =
-                'pointer-events:none;display:inline-flex;flex-direction:column;align-items:center;line-height:0;'
-
-            const box = document.createElement('div')
-            box.style.cssText =
-                'background:#eee8fa;padding:3px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;box-shadow:0 4px 10px rgba(0,0,0,0.45);'
-
-            img.alt = 'Chat media'
-            img.style.cssText =
-                'max-width:76px;max-height:68px;min-width:28px;min-height:28px;border-radius:4px;display:block;object-fit:contain;'
-
-            const arrow = document.createElement('div')
-            arrow.style.cssText =
-                'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #eee8fa;margin-top:-1px;'
-
-            box.append(img)
-            wrap.append(box)
-            wrap.append(arrow)
-
-            const dom = this.add.dom(0, -68, wrap).setOrigin(0.5, 1)
-            dom.pointerEvents = 'none'
-            c.root.add(dom)
-            c.bubble = dom
-
-            this.time.delayedCall(duration, () => {
-                if (c.bubble === dom) {
-                    dom.destroy()
-                    c.bubble = undefined
-                }
-            })
         }
+        img.onerror = unavailable
 
-        img.onerror = () => {
-            cancelled = true
-            console.warn('[office] media_load_failed')
-        }
-
+        c.root.add(dom)
+        c.bubble = dom
         // Keep the image on the Activity origin so Discord's CSP allows it.
         img.src = `/api/media/image?url=${encodeURIComponent(url)}`
     }
