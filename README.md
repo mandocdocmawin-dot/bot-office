@@ -100,7 +100,7 @@ The receiver uses its SpeakingMap only; the app creates **no audio stream subscr
 
 To test live speech, actually join the Discord voice call, unmute, and speak while the bot is present. Muting, leaving, loss of monitoring, or missing events clears the indicator. No browser microphone permission is needed. In mock mode Alex and Jun simulate speaking without any microphone or Discord connection.
 
-Characters have separately animated feet and arms while walking. The stride resets when stopped; reduced-motion preference keeps limbs static. Your own character is fully opaque in your local view even with Discord Invisible/offline presence; other offline members keep the configured dimming.
+Characters have separately animated feet and arms while walking, with alternating steps driven by the distance travelled on screen. The stride resets when stopped; reduced-motion preference uses smaller steps without body bounce or sway. Your own character is fully opaque in your local view even with Discord Invisible/offline presence; other offline members keep the configured dimming.
 
 Voice implementation references: [VoiceConnection receiver](https://discord.js.org/docs/packages/voice/main/VoiceConnection%3AClass), [VoiceReceiver packet handling](https://github.com/discordjs/discord.js/blob/main/packages/voice/src/receive/VoiceReceiver.ts).
 
@@ -139,6 +139,38 @@ DISCORD_REDIRECT_URI=https://your-tunnel-host/auth/callback
 Add that exact callback under **OAuth2 → Redirects** in the Developer Portal, restart `npm start`, and share `WEB_URL`. Everyone must be in `GUILD_ID`. Keep the tunnel process running. When its hostname changes, update both settings and the portal redirect. Keep HOST at 127.0.0.1 for a tunnel on the same machine; use 0.0.0.0 if your hosting platform requires it. The tunnel must support WebSocket upgrades on `/ws`.
 
 For production without a tunnel, use an HTTPS reverse proxy for the same routes. Never expose the development mock mode publicly as your real server: it deliberately skips Discord login.
+
+## Deploy to Render with Docker
+
+The root `Dockerfile` builds both workspaces and runs the Node server with the built frontend on the same origin. It uses Node 24, production server dependencies, a non-root runtime user, and direct Node startup for shutdown signals. `.dockerignore` allows only build inputs, keeping local `.env` files, Git history, dependencies, and QA artifacts out of the build context.
+
+1. Push this repository, including `Dockerfile`, `.dockerignore`, `render.yaml`, and `package-lock.json`, to your Git provider. Keep your local `.env` private.
+2. In Render, choose **New → Blueprint** and connect the repository. Render reads `render.yaml` to create one Docker web service in Singapore, with a paid 512 MB compute plan, one instance, and `/health` checks. Review the displayed cost before creating it.
+3. Enter the requested `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_TOKEN`, and `GUILD_ID` values. Render generates `SESSION_SECRET` automatically.
+4. Set `WEB_URL` to the service's actual public HTTPS origin, for example `https://your-office.onrender.com`, without a trailing slash. Set `DISCORD_REDIRECT_URI` to that origin plus `/auth/callback`. If Render assigns a different hostname than expected, update both variables and redeploy.
+5. Add the exact `DISCORD_REDIRECT_URI` under **Discord Developer Portal → OAuth2 → Redirects**. Keep the bot intents and permissions from the setup sections above enabled.
+6. After deployment, open `/health` to check HTTP readiness and inspect its `discord` and `voiceMonitor` states separately. Sign in through Discord, test walking with another member, and join a voice call to verify the speaking indicator. Voice monitoring also requires a working outbound Discord voice/UDP connection from the host.
+
+For manual service creation instead of a Blueprint, choose **Web Service → Docker**, leave the root directory at the repository root, set Dockerfile Path to `./Dockerfile`, and leave Docker Command empty to use the image's default command. Use `/health` as the health check and add the same environment variables. Generate a random `SESSION_SECRET` of at least 32 characters yourself for this path. The image defaults to `HOST=0.0.0.0` and `PORT=10000`, and also respects a platform-provided `PORT`.
+
+Keep one instance: office state and sessions currently live in memory, and each process starts a Discord bot connection. Restarts and redeploys reset sessions and positions; a persistent disk alone does not change that. Paid compute avoids the free tier's idle spin-down. There is no database or disk required for this version.
+
+Reference: [Render Docker deployment](https://render.com/docs/docker) and [Blueprint configuration](https://render.com/docs/blueprint-spec).
+
+To build and try the same image locally with Docker Desktop running:
+
+```sh
+docker build -t discord-office .
+docker run --rm --init -p 3001:10000 --env-file .env -e HOST=0.0.0.0 -e PORT=10000 -e WEB_URL=http://localhost:3001 -e DISCORD_REDIRECT_URI=http://localhost:3001/auth/callback discord-office
+```
+
+Add `http://localhost:3001/auth/callback` as a Discord OAuth2 redirect for that local test. To smoke-test the image without Discord credentials, use mock mode on loopback only:
+
+```sh
+docker run --rm --init -p 127.0.0.1:3001:10000 -e WEB_URL=http://localhost:3001 discord-office node server/dist/index.js --mock
+```
+
+Open `http://localhost:3001` and `http://localhost:3001/health`. Do not use the mock command on Render.
 
 ## Configuration and architecture
 

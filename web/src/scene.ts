@@ -6,7 +6,7 @@ interface Character {
   root: Phaser.GameObjects.Container; body: Phaser.GameObjects.Container;
   name: Phaser.GameObjects.Text; status: Phaser.GameObjects.Arc;
   bubble?: Phaser.GameObjects.Container; zzz: Phaser.GameObjects.Text;
-  member: Member; seed: number; targetX: number; targetY: number;
+  member: Member; walkPhase: number; targetX: number; targetY: number;
   voiceRing: Phaser.GameObjects.Arc; talk: Phaser.GameObjects.Container; talkBars: Phaser.GameObjects.Rectangle[]; voiceName: Phaser.GameObjects.Text;
   legs: [Phaser.GameObjects.Container, Phaser.GameObjects.Container]; arms: [Phaser.GameObjects.Container, Phaser.GameObjects.Container];
 }
@@ -142,15 +142,21 @@ export class OfficeScene extends Phaser.Scene {
   update(time: number, delta: number) {
     for (const c of this.people.values()) {
       const blend = this.reducedMotion.matches ? 1 : 1 - Math.exp(-delta / 55);
+      const previousX = c.root.x, previousY = c.root.y;
       c.root.x += (c.targetX - c.root.x) * blend; c.root.y += (c.targetY - c.root.y) * blend;
+      const travelled = Math.hypot(c.root.x - previousX, c.root.y - previousY);
       c.root.setDepth((c.bubble ? 4000 : 1000) + c.root.y);
-      const walking = !this.frozen && !this.reducedMotion.matches && c.member.moving;
-      const stride = walking ? Math.sin(time / 85 + c.seed) : 0;
-      c.legs[0].setPosition(-6 + stride * 1.5, -16 - Math.max(0, stride) * 4).setAngle(stride * 20);
-      c.legs[1].setPosition(7 - stride * 1.5, -16 - Math.max(0, -stride) * 4).setAngle(-stride * 20);
-      c.arms[0].setAngle(-stride * 17); c.arms[1].setAngle(stride * 17);
-      c.body.y = walking ? -Math.abs(Math.sin(time / 85 + c.seed)) * 4 : 0;
-      c.body.angle = walking ? Math.sin(time / 100 + c.seed) * 3 : 0;
+      // Follow the rendered movement, including interpolation after a stop packet.
+      // Distance-driven steps stay in sync at different speeds and frame rates.
+      const walking = !this.frozen && (c.member.moving || travelled > .03);
+      c.walkPhase = walking ? (c.walkPhase + Math.min(travelled, 12) * Math.PI / 19) % (Math.PI * 2) : 0;
+      const stride = Math.sin(c.walkPhase) * (this.reducedMotion.matches ? .35 : 1);
+      c.legs[0].setPosition(-6 + stride * 2, -16 - Math.max(0, stride) * 5).setAngle(stride * 28);
+      c.legs[1].setPosition(7 - stride * 2, -16 - Math.max(0, -stride) * 5).setAngle(-stride * 28);
+      c.arms[0].setAngle(-stride * 20); c.arms[1].setAngle(stride * 20);
+      const bounce = walking && !this.reducedMotion.matches;
+      c.body.y = bounce ? -Math.abs(stride) * 2 : 0;
+      c.body.angle = bounce ? stride * 2 : 0;
       const speaking = !this.frozen && !!c.member.speaking;
       c.voiceRing.setVisible(speaking); c.talk.setVisible(speaking && !c.bubble);
       const animate = speaking && !this.reducedMotion.matches;
@@ -241,7 +247,7 @@ export class OfficeScene extends Phaser.Scene {
     const talkBars = [0, 1, 2].map(i => this.add.rectangle(-8 + i * 8, 0, 4, 15, 0x8cf0b5).setOrigin(.5, 1));
     const talk = this.add.container(0, -77, [this.add.rectangle(0, -7, 35, 24, 0x142d25).setStrokeStyle(1, 0x529f77), ...talkBars]).setVisible(false);
     body.add([voiceRing, ...legs, arms[0], person, arms[1], head, initial, status]); root.add([shadow, body, name, zzz, voiceName, talk]);
-    const c: Character = { root, body, name, status, zzz, member: m, seed, targetX: x, targetY: y, voiceRing, talk, talkBars, voiceName, legs, arms }; this.loadAvatar(c, m); return c;
+    const c: Character = { root, body, name, status, zzz, member: m, walkPhase: 0, targetX: x, targetY: y, voiceRing, talk, talkBars, voiceName, legs, arms }; this.loadAvatar(c, m); return c;
   }
   private loadAvatar(c: Character, m: Member) {
     if (!m.avatar) { c.body.getByName('avatar')?.destroy(); return; }
