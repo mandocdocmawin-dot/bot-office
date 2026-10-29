@@ -263,26 +263,35 @@ export class OfficeScene extends Phaser.Scene {
             // Follow the rendered movement, including interpolation after a stop packet.
             // Distance-driven steps stay in sync at different speeds and frame rates.
             const walking = !this.frozen && (c.member.moving || travelled > 0.03)
-            c.walkPhase = walking ? (c.walkPhase + (Math.min(travelled, 12) * Math.PI) / 19) % (Math.PI * 2) : 0
-            const stride = Math.sin(c.walkPhase) * (this.reducedMotion.matches ? 0.35 : 1)
-            c.legs[0].setPosition(-6 + stride * 2, -16 - Math.max(0, stride) * 5).setAngle(stride * 28)
-            c.legs[1].setPosition(7 - stride * 2, -16 - Math.max(0, -stride) * 5).setAngle(-stride * 28)
-            c.arms[0].setAngle(-stride * 20)
-            c.arms[1].setAngle(stride * 20)
-            const bounce = walking && !this.reducedMotion.matches
-            c.body.y = bounce ? -Math.abs(stride) * 2 : 0
-            c.body.angle = bounce ? stride * 2 : 0
+            if (walking || c.walkPhase !== 0) {
+                c.walkPhase = walking ? (c.walkPhase + (Math.min(travelled, 12) * Math.PI) / 19) % (Math.PI * 2) : 0
+                const stride = Math.sin(c.walkPhase) * (this.reducedMotion.matches ? 0.35 : 1)
+                c.legs[0].setPosition(-6 + stride * 2, -16 - Math.max(0, stride) * 5).setAngle(stride * 28)
+                c.legs[1].setPosition(7 - stride * 2, -16 - Math.max(0, -stride) * 5).setAngle(-stride * 28)
+                c.arms[0].setAngle(-stride * 20)
+                c.arms[1].setAngle(stride * 20)
+                const bounce = walking && !this.reducedMotion.matches
+                c.body.y = bounce ? -Math.abs(stride) * 2 : 0
+                c.body.angle = bounce ? stride * 2 : 0
+            }
             const speaking = !this.frozen && Boolean(c.member.speaking)
-            c.voiceRing.setVisible(speaking)
-            c.talk.setVisible(speaking && !c.bubble)
-            const animate = speaking && !this.reducedMotion.matches
-            c.voiceRing.setScale(animate ? 1.05 + Math.sin(time / 100) * 0.08 : 1)
-            c.talkBars.forEach((bar, i) =>
-                bar.setScale(1, animate ? 0.45 + Math.abs(Math.sin(time / 95 + i * 0.9)) * 0.65 : 0.7)
-            )
-            if (animate && !walking) {
-                c.body.y = Math.sin(time / 95) * 1.5
-                c.body.angle = Math.sin(time / 160) * 1.2
+            if (c.voiceRing.visible !== speaking) {
+                c.voiceRing.setVisible(speaking)
+            }
+            const talkVisible = speaking && !c.bubble
+            if (c.talk.visible !== talkVisible) {
+                c.talk.setVisible(talkVisible)
+            }
+            if (speaking) {
+                const animate = !this.reducedMotion.matches
+                c.voiceRing.setScale(animate ? 1.05 + Math.sin(time / 100) * 0.08 : 1)
+                c.talkBars.forEach((bar, i) =>
+                    bar.setScale(1, animate ? 0.45 + Math.abs(Math.sin(time / 95 + i * 0.9)) * 0.65 : 0.7)
+                )
+                if (animate && !walking) {
+                    c.body.y = Math.sin(time / 95) * 1.5
+                    c.body.angle = Math.sin(time / 160) * 1.2
+                }
             }
         }
     }
@@ -512,7 +521,7 @@ export class OfficeScene extends Phaser.Scene {
             return
         }
         this.avatarManager.acquire(m.id, m.avatar, (key) => {
-            if (!c.root.scene || c.member.avatar !== m.avatar) {
+            if (!c.root.scene || c.member.avatar !== m.avatar || !this.textures.exists(key)) {
                 return
             }
             c.body.getByName('avatar')?.destroy()

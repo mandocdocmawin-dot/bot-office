@@ -354,9 +354,18 @@ export function createOfficeServer(config: Config, options: AuthOptions, request
         config.tick_rate,
         (dt) => office.tick(dt),
         () => {
-            const packet: Packet = { type: 'state', at: Date.now(), state: office.snapshot() }
+            if (connections.size === 0) {
+                return
+            }
+            const raw = JSON.stringify({ type: 'state', at: Date.now(), state: office.snapshot() })
             for (const socket of connections.values()) {
-                send(socket, packet)
+                if (socket.readyState === WebSocket.OPEN) {
+                    if (socket.bufferedAmount > 500_000) {
+                        socket.close(4008, 'Client too slow')
+                    } else {
+                        socket.send(raw)
+                    }
+                }
             }
         }
     )
