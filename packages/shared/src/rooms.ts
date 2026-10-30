@@ -7,7 +7,7 @@ export const roomDisplayName = (name: string) => name === 'Commons' ? 'Tambayan'
 // Local to Commons. Keeping pods off the central cross preserves all four doors.
 export const TAMBAYAN_PODS = [{ x: 105, y: 335 }, { x: 416, y: 112 }, { x: 402, y: 344 }] as const
 export const TAMBAYAN_SEATS_PER_POD = 4
-export const TAMBAYAN_CHAIR_RADIUS = 36
+export const TAMBAYAN_CHAIR_RADIUS = 44
 export const TAMBAYAN_PLANTS = [[21, 23], [21, 190], [118, 22], [298, 22], [499, 23],
     [499, 186], [22, 418], [196, 418], [495, 417], [496, 336]] as const
 
