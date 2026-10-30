@@ -8,8 +8,11 @@ const root = path.resolve(__dirname, '../..')
  const sources = JSON.parse(await fs.readFile(path.join(__dirname, 'sprite-sources-v2.json'), 'utf8'))
  const destination = path.join(root, 'web/public/assets/tambayan/sprites-v2')
  await fs.mkdir(destination, { recursive: true })
- const manifest = {}
+ const only = new Set(process.argv.slice(2))
+ const manifestPath = path.join(root, 'web/src/tambayan-sprites-v2.json')
+ const manifest = only.size ? JSON.parse(await fs.readFile(manifestPath, 'utf8')) : {}
  for (const source of sources) {
+  if (only.size && !only.has(source.id)) continue
   const target = path.join(destination, `${source.id}.webp`)
   await sharp(source.source).resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true })
    .webp({ quality: 94, alphaQuality: 100, effort: 6 }).toFile(target)
@@ -27,6 +30,6 @@ const root = path.resolve(__dirname, '../..')
    bounds: { x: left, y: top, w: right - left + 1, h: bottom - top + 1 }
   }
  }
- await fs.writeFile(path.join(root, 'web/src/tambayan-sprites-v2.json'), JSON.stringify(manifest, null, 2) + '\n')
+ await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n')
  console.log(`Prepared ${Object.keys(manifest).length} sprites; transparency and bounds verified.`)
 })().catch(error => { console.error(error); process.exitCode = 1 })

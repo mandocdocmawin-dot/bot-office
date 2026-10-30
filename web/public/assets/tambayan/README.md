@@ -10,6 +10,8 @@ The approved visual reference is `design-reference.png`. It is not used as a fla
 
 The layout has three four-chair pods, twelve chairs total. Member count never changes chair size or packs more chairs around the tables. Counts above twelve show a standing-overflow indicator. Additional pods, room expansion and Sit / Stand require a later coordinated layout/server change. Current seating and amenity props are visual furnishings, not functional seat claims, announcements or synchronized media.
 
-Click the Tambayan title or choose Tambayan in People to focus the room. Fit returns to the complete office. Internal `Commons` identity and the surrounding rooms remain intact.
+Click the Tambayan title or choose Tambayan in People to focus the room. This view isolates its objects and occupants on a raised room platform; Fit restores all office rooms and labels. Panning, zooming or following someone also returns to the world view. Walking your own character out of Tambayan restores the full map. Clicks outside the isolated room are ignored. Internal `Commons` identity and the surrounding rooms remain intact.
 
 Rebuild normalization with `node output/tambayan/prepare-sprites-v2.cjs`; it uses the local bundled Sharp library and generated source files recorded in the provenance manifest. Final WebP files are committed, so this step is not required for an ordinary build.
+
+Run `node web/scripts/tambayan-visual-qa.cjs` from the repository root with the localhost demo running to check texture loading, stable twelve-seat layout under a simulated thirty-member roster, room isolation, full-map restoration and mobile focus. The script saves fresh captures under `.qa/`. Final reviewed captures are retained under `artifacts/tambayan/v2/`.

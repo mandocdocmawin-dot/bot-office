@@ -24,23 +24,23 @@
   "chair-ne": {
     "file": "/assets/tambayan/sprites-v2/chair-ne.webp",
     "width": 640,
-    "height": 533,
+    "height": 591,
     "bounds": {
-      "x": 132,
-      "y": 56,
-      "w": 413,
-      "h": 426
+      "x": 72,
+      "y": 79,
+      "w": 497,
+      "h": 474
     }
   },
   "chair-nw": {
     "file": "/assets/tambayan/sprites-v2/chair-nw.webp",
     "width": 640,
-    "height": 600,
+    "height": 512,
     "bounds": {
-      "x": 71,
-      "y": 53,
-      "w": 503,
-      "h": 514
+      "x": 125,
+      "y": 70,
+      "w": 397,
+      "h": 399
     }
   },
   "coffee-v2": {

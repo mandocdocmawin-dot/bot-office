@@ -57,11 +57,14 @@ export class Tambayan {
             polygon(g, corners(x + 8 + i * (w - 16) / 24, y + 8, (w - 16) / 24 + .2, h - 16),
                 0x9d8fd0, .055 * Math.sin((i / 24) * Math.PI))
         }
-        this.roundedFloor(g, x + w / 2 - 38, y + 6, 76, h - 12, 11, 0x8175bb, .4)
-        this.roundedFloor(g, x + 6, y + 204, w - 12, 76, 11, 0x8175bb, .4)
-        this.roundedFloor(g, x + w / 2 - 57, y + 185, 114, 114, 14, 0x8175bb, .2)
+        const left = x + w / 2 - 38, right = x + w / 2 + 38
+        // One continuous cross: overlapping translucent rectangles made a checkerboard.
+        polygon(g, [[left, y + 6], [right, y + 6], [right, y + 204], [x + w - 6, y + 204],
+            [x + w - 6, y + 280], [right, y + 280], [right, y + h - 6], [left, y + h - 6],
+            [left, y + 280], [x + 6, y + 280], [x + 6, y + 204], [left, y + 204]]
+            .map(([px, py]) => project(px, py)), 0x8d80c0, .32)
         for (const pod of TAMBAYAN_PODS) {
-            this.roundedFloor(g, x + pod.x - 73, y + pod.y - 73, 146, 146, 12, 0x9986d0, .48)
+            this.roundedFloor(g, x + pod.x - 73, y + pod.y - 73, 146, 146, 12, 0x9986d0, .36)
         }
     }
 
@@ -107,7 +110,7 @@ export class Tambayan {
                 const x = this.room.x + pod.x + Math.cos(angles[i]) * 53
                 const y = this.room.y + pod.y + Math.sin(angles[i]) * 53
                 this.shadow(x, y, 49, .12)
-                const chair = tambayanSprite(this.scene, views[i], x, y, 51, .22)
+                const chair = tambayanSprite(this.scene, views[i], x, y, 58, .22)
                 this.chairs.set(`${podIndex}:${i}`, chair)
             }
         }
@@ -116,6 +119,10 @@ export class Tambayan {
     private rails() {
         const { x, y, w, h } = this.room
         const g = this.scene.add.graphics().setDepth(4)
+        for (const [dx, dy, width, height] of [[230, -8, 64, 18], [230, h - 10, 64, 18],
+            [-8, 210, 18, 64], [w - 10, 210, 18, 64]]) {
+            slab(g, x + dx, y + dy, width, height, 1, 3, 0x9c8ad0)
+        }
         const segments = [
             [0, 0, 230, 0], [294, 0, w, 0], [0, 0, 0, 210], [0, 274, 0, h],
             [w, 0, w, 210], [w, 274, w, h], [0, h, 230, h], [294, h, w, h]

@@ -27,6 +27,7 @@ interface Character {
     arms: [Phaser.GameObjects.Container, Phaser.GameObjects.Container]
     depth: number
 }
+type VisibleObject = Phaser.GameObjects.GameObject & { visible: boolean; setVisible(value: boolean): unknown }
 export class OfficeScene extends Phaser.Scene {
     // Safe to assign before Phaser has booted and injected scene.events.
     onFrame: () => void = () => {}
@@ -42,6 +43,10 @@ export class OfficeScene extends Phaser.Scene {
     private viewportHeight = 0
     private selected?: Room
     private focusedRoom?: Room
+    private roomObjects = new Map<Room, VisibleObject[]>()
+    private worldObjects: VisibleObject[] = []
+    private focusVisibility = new Map<VisibleObject, boolean>()
+    private focusedFoundation?: Phaser.GameObjects.Graphics
     private outlines = new Map<Room, Phaser.GameObjects.Graphics>()
     private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
     private selfId = ''
@@ -67,7 +72,9 @@ export class OfficeScene extends Phaser.Scene {
             this.add.text(p.x, p.y, '◇', { fontSize: '20px', color: '#b9aacb' }).setOrigin(0.5).setDepth(4)
         }
         const furniture = new Furnishing(this)
+        this.worldObjects = [...this.children.list] as VisibleObject[]
         for (const room of rooms) {
+            const firstObject = this.children.list.length
             const { x, y, w, h, color, name } = room
             const g = this.add.graphics().setDepth(1)
             polygon(g, corners(x, y, w, h), 0x17_17_22)
@@ -161,7 +168,12 @@ export class OfficeScene extends Phaser.Scene {
             outline.setVisible(false)
             this.outlines.set(name, outline)
             this.furnish(furniture, name, x, y, w, h, color)
+            this.roomObjects.set(name, this.children.list.slice(firstObject) as VisibleObject[])
         }
+        const commons = rooms.find(room => room.name === 'Commons')!
+        this.focusedFoundation = this.add.graphics().setDepth(0).setVisible(false)
+        slab(this.focusedFoundation, commons.x - 10, commons.y - 10, commons.w + 20, commons.h + 20,
+            -4, 28, 0x292738)
         this.fit()
         const resize = () => this.resizeView()
         this.scale.on('resize', resize)
@@ -201,6 +213,7 @@ export class OfficeScene extends Phaser.Scene {
             if (Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) > 6) {
                 this.autoFit = false
                 if (this.focusedRoom) {
+                    this.restoreRoomFocus()
                     this.focusedRoom = undefined
                     this.reportZoom()
                 }
@@ -213,6 +226,10 @@ export class OfficeScene extends Phaser.Scene {
             if (!this.frozen && Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) < 6) {
                 const world = this.cameras.main.getWorldPoint(p.x, p.y)
                 const ground = unproject(world.x, world.y)
+                if (this.focusedRoom) {
+                    const room = rooms.find(room => room.name === this.focusedRoom)!
+                    if (ground.x < room.x || ground.x > room.x + room.w || ground.y < room.y || ground.y > room.y + room.h) return
+                }
                 // Clicking the empty stage is a camera interaction, not invalid input.
                 if (ground.x >= 0 && ground.x <= 1400 && ground.y >= 0 && ground.y <= 1000) {
                     eventBus.emitEvent('office:move', ground)
@@ -279,6 +296,7 @@ export class OfficeScene extends Phaser.Scene {
         const effectiveDelta = Math.max(delta, realDelta)
         const snap = effectiveDelta >= 200
         for (const c of this.people.values()) {
+            c.root.setVisible(!this.focusedRoom || c.member.room === this.focusedRoom)
             const own = c.member.id === this.selfId
             const previousX = c.root.x
             const previousY = c.root.y
@@ -350,6 +368,7 @@ export class OfficeScene extends Phaser.Scene {
             return
         }
         this.autoFit = true
+        this.restoreRoomFocus()
         this.focusedRoom = undefined
         this.viewportWidth = this.scale.width
         this.viewportHeight = this.scale.height
@@ -387,6 +406,7 @@ export class OfficeScene extends Phaser.Scene {
         const camera = this.cameras.main
         const oldZoom = camera.zoom
         this.autoFit = false
+        this.restoreRoomFocus()
         this.focusedRoom = undefined
         camera.stopFollow()
         this.zoomFactor = Phaser.Math.Clamp(this.zoomFactor + delta, 0.5, 6)
@@ -412,17 +432,35 @@ export class OfficeScene extends Phaser.Scene {
         window.dispatchEvent(new CustomEvent('office-zoom', { detail: zoom }))
     }
     select(room?: Room) {
+        if (this.focusedRoom && room !== this.focusedRoom) {
+            this.restoreRoomFocus()
+            this.focusedRoom = undefined
+            this.reportZoom()
+        }
         this.selected = room
         for (const [name, outline] of this.outlines) {
-            outline.setVisible(name === room)
+            outline.setVisible(name === room && !this.focusedRoom)
         }
     }
     focusRoom(name: Room) {
         if (!this.built) return
+        if (name !== 'Commons') return
         const room = rooms.find(room => room.name === name)
         if (!room) return
         this.autoFit = false
         this.focusedRoom = name
+        this.selected = name
+        for (const [owner, objects] of this.roomObjects) {
+            for (const object of objects) {
+                if (!this.focusVisibility.has(object)) this.focusVisibility.set(object, object.visible)
+                if (owner !== name) object.setVisible(false)
+            }
+        }
+        for (const object of this.worldObjects) {
+            if (!this.focusVisibility.has(object)) this.focusVisibility.set(object, object.visible)
+            object.setVisible(false)
+        }
+        this.focusedFoundation?.setVisible(true)
         this.viewportWidth = this.scale.width
         this.viewportHeight = this.scale.height
         this.fitZoom = fitWorldViewport(this.scale.width, this.scale.height).zoom
@@ -434,10 +472,17 @@ export class OfficeScene extends Phaser.Scene {
         this.cameras.main.stopFollow().setZoom(zoom).centerOn(center.x, center.y)
         this.reportZoom()
     }
+    private restoreRoomFocus() {
+        for (const [object, visible] of this.focusVisibility) object.setVisible(visible)
+        this.focusVisibility.clear()
+        this.focusedFoundation?.setVisible(false)
+        for (const character of this.people.values()) character.root.setVisible(true)
+    }
     focus(id: string) {
         const c = this.people.get(id)
         if (c) {
             this.autoFit = false
+            this.restoreRoomFocus()
             this.focusedRoom = undefined
             this.cameras.main.setZoom(Math.max(this.fitZoom * 1.8, this.cameras.main.zoom))
             this.zoomFactor = this.cameras.main.zoom / this.fitZoom
@@ -464,6 +509,8 @@ export class OfficeScene extends Phaser.Scene {
         }
         this.tambayan?.setMembers(state.members)
         const ownRoom = state.members.find((m) => m.id === this.selfId)?.room
+        const previousOwnRoom = this.people.get(this.selfId)?.member.room
+        if (this.focusedRoom && previousOwnRoom === this.focusedRoom && ownRoom && ownRoom !== this.focusedRoom) this.fit()
         const ids = new Set(state.members.map((m) => m.id))
         for (const [id, c] of this.people) {
             if (!ids.has(id)) {
@@ -533,7 +580,7 @@ export class OfficeScene extends Phaser.Scene {
                     : ''
             )
             c.zzz.setVisible(m.sleeping)
-            c.bubble?.setVisible(!m.sleeping && m.room === ownRoom)
+            c.bubble?.setVisible(!m.sleeping && m.room === ownRoom && (!this.focusedRoom || m.room === this.focusedRoom))
         }
         this.select(this.selected)
     }
