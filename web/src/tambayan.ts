@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { Member, RoomLayout } from '@office/shared/protocol'
-import { TAMBAYAN_PODS, TAMBAYAN_SEATS_PER_POD } from '@office/shared/rooms'
+import { TAMBAYAN_PODS, TAMBAYAN_SEATS_PER_POD, TAMBAYAN_PROPS, TAMBAYAN_PLANTS, tambayanSeats } from '@office/shared/rooms'
 import { corners, polygon, project, slab } from './isometric'
 import { preloadTambayanSprites, tambayanSprite, type TambayanSpriteId } from './tambayan-sprites'
 
@@ -20,15 +20,11 @@ export class Tambayan {
             this.shadow(x + pod.x, y + pod.y, 61, .16)
             tambayanSprite(scene, 'table-v2', x + pod.x, y + pod.y, 56, .23)
         }
-        this.shadow(x + 43, y + 119, 113, .2)
-        tambayanSprite(scene, 'coffee-v2', x + 43, y + 119, 112, .17)
-        this.shadow(x + 180, y + 28, 106, .14)
-        tambayanSprite(scene, 'board-v2', x + 180, y + 28, 104, .08)
-        this.shadow(x + 387, y + 25, 142, .16)
-        tambayanSprite(scene, 'media-v2', x + 387, y + 25, 144, .09)
-        tambayanSprite(scene, 'kiosk-v2', x + 477, y + 294, 35, .2)
-        for (const [dx, dy] of [[21, 23], [21, 190], [118, 22], [298, 22], [499, 23],
-            [499, 186], [22, 418], [196, 418], [495, 417], [496, 336]]) {
+        for (const prop of TAMBAYAN_PROPS) {
+            this.shadow(x + prop.x, y + prop.y, prop.width, .16)
+            tambayanSprite(scene, prop.id, x + prop.x, y + prop.y, prop.width, prop.inset)
+        }
+        for (const [dx, dy] of TAMBAYAN_PLANTS) {
             tambayanSprite(scene, 'plant-v2', x + dx, y + dy, 28, .21)
         }
         this.rails()
@@ -103,16 +99,10 @@ export class Tambayan {
 
     private drawSeats() {
         const views: TambayanSpriteId[] = ['chair-nw', 'chair-ne', 'chair-se', 'chair-sw']
-        const angles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5]
-        for (let podIndex = 0; podIndex < TAMBAYAN_PODS.length; podIndex++) {
-            const pod = TAMBAYAN_PODS[podIndex]
-            for (let i = 0; i < TAMBAYAN_SEATS_PER_POD; i++) {
-                const x = this.room.x + pod.x + Math.cos(angles[i]) * 53
-                const y = this.room.y + pod.y + Math.sin(angles[i]) * 53
-                this.shadow(x, y, 49, .12)
-                const chair = tambayanSprite(this.scene, views[i], x, y, 58, .22)
-                this.chairs.set(`${podIndex}:${i}`, chair)
-            }
+        for (const seat of tambayanSeats(this.room)) {
+            this.shadow(seat.x, seat.y, 49, .12)
+            const chair = tambayanSprite(this.scene, views[seat.index], seat.x, seat.y, 58, .22)
+            this.chairs.set(seat.id, chair)
         }
     }
 

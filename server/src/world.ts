@@ -1,5 +1,6 @@
 import type { Config } from './config.js'
 import type { Point, Rect, Room } from './protocol.js'
+import { tambayanObstacles } from '@office/shared/rooms'
 
 const contains = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
 
@@ -80,9 +81,13 @@ class MinHeap {
 export class World {
     private walkableAreas: Rect[]
     private sampleOffsets: [number, number][]
+    private obstacles: Rect[]
 
     constructor(public config: Config) {
         this.walkableAreas = [...config.rooms, ...config.doors]
+        const commons = config.rooms.find(room => room.name === 'Commons')!
+        this.obstacles = [...config.obstacles.filter(obstacle => !contains(commons, obstacle.x, obstacle.y)),
+            ...tambayanObstacles(commons)]
         const r = config.player_radius
         const diag = r * 0.707
         this.sampleOffsets = [
@@ -116,8 +121,8 @@ export class World {
             if (!inWalkable) {
                 return false
             }
-            for (let j = 0; j < this.config.obstacles.length; j++) {
-                if (contains(this.config.obstacles[j], px, py)) {
+            for (let j = 0; j < this.obstacles.length; j++) {
+                if (contains(this.obstacles[j], px, py)) {
                     return false
                 }
             }
