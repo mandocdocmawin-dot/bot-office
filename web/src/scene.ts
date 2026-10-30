@@ -3,9 +3,10 @@ import type { Member, Room, Snapshot } from '@office/shared/protocol'
 import { AvatarTextureManager } from './avatar-manager'
 import { robotStyle } from './character-styles'
 import { eventBus } from './events'
-import { colorCSS, doors, rooms } from './rooms'
+import { colorCSS, doors, roomDisplayName, rooms } from './rooms'
 import { Furnishing, corners, polygon, project, slab, unproject } from './isometric'
 import { fitWorldViewport } from './viewport-fit'
+import { Tambayan } from './tambayan'
 
 interface Character {
     root: Phaser.GameObjects.Container
@@ -46,8 +47,12 @@ export class OfficeScene extends Phaser.Scene {
     private frozen = false
     private lastUpdate = 0
     private avatarManager!: AvatarTextureManager
+    private tambayan?: Tambayan
     constructor() {
         super('office')
+    }
+    preload() {
+        Tambayan.preload(this)
     }
     create() {
         this.avatarManager = new AvatarTextureManager(this.textures)
@@ -77,12 +82,14 @@ export class OfficeScene extends Phaser.Scene {
             const wall = corners(x, y, w, h, 29)
             polygon(g, [edge[3], edge[0], wall[0], wall[3]], color, 0.09)
             polygon(g, [edge[0], edge[1], wall[1], wall[0]], color, 0.1)
-            g.lineStyle(9, color, 0.06).strokePoints([wall[3], wall[0], wall[1]], false)
-            g.lineStyle(3, color, 0.85).strokePoints([wall[3], wall[0], wall[1]], false)
+            if (name !== 'Commons') {
+                g.lineStyle(9, color, 0.06).strokePoints([wall[3], wall[0], wall[1]], false)
+                g.lineStyle(3, color, 0.85).strokePoints([wall[3], wall[0], wall[1]], false)
+            }
             g.lineStyle(2, color, 0.45).strokePoints([edge[1], edge[2], edge[3]], false)
             const labelPoint = project(x + 15, y + 8, 55)
             const title = this.add
-                .text(labelPoint.x, labelPoint.y, name, {
+                .text(labelPoint.x, labelPoint.y, roomDisplayName(name), {
                     fontFamily: 'Arial',
                     fontSize: '19px',
                     fontStyle: 'bold',
@@ -146,13 +153,6 @@ export class OfficeScene extends Phaser.Scene {
             this.outlines.set(name, outline)
             this.furnish(furniture, name, x, y, w, h, color)
         }
-        const hub = project(485, 508)
-        const beacon = this.add.graphics().setDepth(1000 + hub.y)
-        beacon.fillStyle(0x64_e3_d3, 0.06).fillEllipse(hub.x, hub.y, 110, 55)
-        slab(beacon, 468, 490, 35, 35, 15, 15, 0x39_38_4d)
-        beacon.fillStyle(0x7d_e7_db, 0.13).fillCircle(hub.x, hub.y - 40, 30)
-        beacon.fillStyle(0x73d6d1).fillCircle(hub.x, hub.y - 40, 19)
-        beacon.fillStyle(0xb8fff0).fillEllipse(hub.x - 6, hub.y - 47, 10, 12)
         this.fit()
         const resize = () => this.resizeView()
         this.scale.on('resize', resize)
@@ -212,17 +212,15 @@ export class OfficeScene extends Phaser.Scene {
         }
     }
     private furnish(f: Furnishing, name: Room, x: number, y: number, w: number, h: number, color: number) {
+        if (name === 'Commons') {
+            this.tambayan = new Tambayan(this, rooms.find(room => room.name === name)!)
+            return
+        }
         f.plant(x + 20, y + 24, true)
         f.plant(x + w - 24, y + h - 22)
         if (name === 'Front Office') {
             f.desk(x + w - 180, y + 48, color, true)
             f.sofa(x + 35, y + h - 63, 0x6b_52_67, 105)
-        } else if (name === 'Commons') {
-            f.sofa(x + 135, y + h - 84, 0x6b_55_9b, 120)
-            f.sofa(x + 295, y + h - 84, 0x6b559b, 120)
-            const g = this.add.graphics().setDepth(1000 + project(x + 268, y + h - 60).y)
-            slab(g, x + 265, y + h - 85, 28, 42, 21, 18, 0x806f65)
-            f.desk(x + w - 120, y + 20, color)
         } else if (name === 'Meeting Room') {
             f.meeting(x + 125, y + h - 115, 250, color)
         } else if (name === 'Nap Room') {
@@ -262,6 +260,7 @@ export class OfficeScene extends Phaser.Scene {
     }
     update(time: number, delta: number) {
         this.onFrame()
+        this.tambayan?.update(time)
         const now = performance.now()
         const realDelta = this.lastUpdate > 0 ? Math.min(now - this.lastUpdate, 250) : delta
         this.lastUpdate = now
@@ -425,6 +424,7 @@ export class OfficeScene extends Phaser.Scene {
         if (!this.built) {
             return
         }
+        this.tambayan?.setMembers(state.members)
         const ownRoom = state.members.find((m) => m.id === this.selfId)?.room
         const ids = new Set(state.members.map((m) => m.id))
         for (const [id, c] of this.people) {

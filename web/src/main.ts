@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { ClientPacket, Identity, Packet, Room, Snapshot } from '@office/shared/protocol'
-import { colorCSS, rooms } from './rooms'
+import { colorCSS, roomDisplayName, rooms } from './rooms'
 import { OfficeScene } from './scene'
 import { eventBus } from './events'
 import { ActivityCooldownError, activityAvatar, activityLogin, inActivity, watchActivitySpeaking } from './activity'
@@ -277,7 +277,7 @@ function office(user: Identity, mock: boolean) {
             const dot = document.createElement('i')
             dot.className = 'room-dot'
             const name = document.createElement('span')
-            name.textContent = room.name
+            name.textContent = roomDisplayName(room.name)
             const count = document.createElement('span')
             count.className = 'room-count'
             count.textContent = String(all.length)
@@ -655,7 +655,7 @@ function office(user: Identity, mock: boolean) {
                     'Members appear from Discord. Previews are transient. Log out ends your viewer session.'
             }
             el('server-name').textContent = snapshot.config.serverName
-            el('room-hint').textContent = snapshot.members.find((m) => m.id === selfId)?.room ?? 'Office'
+            el('room-hint').textContent = roomDisplayName(snapshot.members.find((m) => m.id === selfId)?.room ?? 'Office')
             el('update-time').textContent = mock
                 ? 'Demo · move around and try the controls'
                 : 'Live · 20 updates / second'

@@ -1,0 +1,98 @@
+[
+  {
+    "id": "coffee-station",
+    "label": "Coffee and water station",
+    "file": "assets/coffee-station.svg",
+    "width": 126.68,
+    "height": 146.0,
+    "origin": [
+      0.235238,
+      0.450685
+    ],
+    "footprint": [
+      108,
+      30
+    ],
+    "action": "coffee"
+  },
+  {
+    "id": "notice-board",
+    "label": "Announcements and events",
+    "file": "assets/notice-board.svg",
+    "width": 132.7,
+    "height": 191.4,
+    "origin": [
+      0.192163,
+      0.524556
+    ],
+    "footprint": [
+      120,
+      25
+    ],
+    "action": "announcements"
+  },
+  {
+    "id": "media-screen",
+    "label": "Watch party screen",
+    "file": "assets/media-screen.svg",
+    "width": 152.48,
+    "height": 191.2,
+    "origin": [
+      0.184155,
+      0.472803
+    ],
+    "footprint": [
+      140,
+      28
+    ],
+    "action": "watch-party"
+  },
+  {
+    "id": "navigation-kiosk",
+    "label": "Room navigation kiosk",
+    "file": "assets/navigation-kiosk.svg",
+    "width": 63.04,
+    "height": 112.2,
+    "origin": [
+      0.5,
+      0.622103
+    ],
+    "footprint": [
+      32,
+      32
+    ],
+    "action": "room-directory"
+  },
+  {
+    "id": "game-shelf",
+    "label": "Board games and quick activities",
+    "file": "assets/game-shelf.svg",
+    "width": 106.9,
+    "height": 145.8,
+    "origin": [
+      0.246586,
+      0.507545
+    ],
+    "footprint": [
+      89,
+      26
+    ],
+    "action": "games"
+  },
+  {
+    "id": "modular-chair",
+    "label": "One modular lounge chair",
+    "file": "assets/modular-chair.svg",
+    "width": 57.88,
+    "height": 88.8,
+    "origin": [
+      0.485142,
+      0.596847
+    ],
+    "footprint": [
+      30,
+      28
+    ],
+    "action": "seat"
+  }
+]
