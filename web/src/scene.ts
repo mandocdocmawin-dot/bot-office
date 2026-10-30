@@ -41,6 +41,7 @@ export class OfficeScene extends Phaser.Scene {
     private viewportWidth = 0
     private viewportHeight = 0
     private selected?: Room
+    private focusedRoom?: Room
     private outlines = new Map<Room, Phaser.GameObjects.Graphics>()
     private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
     private selfId = ''
@@ -100,6 +101,14 @@ export class OfficeScene extends Phaser.Scene {
                 .setOrigin(0, 1)
                 .setDepth(3000)
             this.roomLabels.set(name, title)
+            if (name === 'Commons') {
+                title.setColor('#a8f0e8').setInteractive({ useHandCursor: true })
+                title.on('pointerup', (_pointer: Phaser.Input.Pointer, _x: number, _y: number,
+                    event: Phaser.Types.Input.EventData) => {
+                    event.stopPropagation()
+                    this.focusRoom('Commons')
+                })
+            }
             this.counts.set(
                 name,
                 this.add
@@ -191,6 +200,10 @@ export class OfficeScene extends Phaser.Scene {
             }
             if (Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) > 6) {
                 this.autoFit = false
+                if (this.focusedRoom) {
+                    this.focusedRoom = undefined
+                    this.reportZoom()
+                }
                 this.cameras.main.stopFollow()
             }
             this.cameras.main.scrollX -= (p.x - p.prevPosition.x) / this.cameras.main.zoom
@@ -260,7 +273,6 @@ export class OfficeScene extends Phaser.Scene {
     }
     update(time: number, delta: number) {
         this.onFrame()
-        this.tambayan?.update(time)
         const now = performance.now()
         const realDelta = this.lastUpdate > 0 ? Math.min(now - this.lastUpdate, 250) : delta
         this.lastUpdate = now
@@ -338,6 +350,7 @@ export class OfficeScene extends Phaser.Scene {
             return
         }
         this.autoFit = true
+        this.focusedRoom = undefined
         this.viewportWidth = this.scale.width
         this.viewportHeight = this.scale.height
         const fitted = fitWorldViewport(this.scale.width, this.scale.height)
@@ -355,6 +368,10 @@ export class OfficeScene extends Phaser.Scene {
             this.fit()
             return
         }
+        if (this.focusedRoom) {
+            this.focusRoom(this.focusedRoom)
+            return
+        }
         const camera = this.cameras.main
         const center = { x: camera.midPoint.x, y: camera.midPoint.y }
         this.viewportWidth = this.scale.width
@@ -370,6 +387,7 @@ export class OfficeScene extends Phaser.Scene {
         const camera = this.cameras.main
         const oldZoom = camera.zoom
         this.autoFit = false
+        this.focusedRoom = undefined
         camera.stopFollow()
         this.zoomFactor = Phaser.Math.Clamp(this.zoomFactor + delta, 0.5, 6)
         const nextZoom = this.fitZoom * this.zoomFactor
@@ -384,8 +402,10 @@ export class OfficeScene extends Phaser.Scene {
         // Room names remain readable when the entire world is fitted to the viewport.
         const labelScale = Math.max(1, (this.scale.width <= 480 ? 0.42 : 0.6) / this.cameras.main.zoom)
         for (const [room, label] of this.roomLabels) {
-            label.setScale(labelScale)
-            this.counts.get(room)?.setScale(labelScale).setX(label.x + label.displayWidth + 8).setVisible(this.scale.width > 480)
+            const visible = !this.focusedRoom || room === this.focusedRoom
+            label.setScale(labelScale).setVisible(visible)
+            this.counts.get(room)?.setScale(labelScale).setX(label.x + label.displayWidth + 8)
+                .setVisible(visible && this.scale.width > 480)
         }
         const zoom = Math.round(this.zoomFactor * 100)
         eventBus.emitEvent('office:zoom', { zoom })
@@ -397,10 +417,28 @@ export class OfficeScene extends Phaser.Scene {
             outline.setVisible(name === room)
         }
     }
+    focusRoom(name: Room) {
+        if (!this.built) return
+        const room = rooms.find(room => room.name === name)
+        if (!room) return
+        this.autoFit = false
+        this.focusedRoom = name
+        this.viewportWidth = this.scale.width
+        this.viewportHeight = this.scale.height
+        this.fitZoom = fitWorldViewport(this.scale.width, this.scale.height).zoom
+        const width = (room.w + room.h) * .86
+        const height = (room.w + room.h) * .6 + 100
+        const zoom = Math.min((this.scale.width - 48) / width, (this.scale.height - 180) / height, 2)
+        this.zoomFactor = zoom / this.fitZoom
+        const center = project(room.x + room.w / 2, room.y + room.h / 2, 36)
+        this.cameras.main.stopFollow().setZoom(zoom).centerOn(center.x, center.y)
+        this.reportZoom()
+    }
     focus(id: string) {
         const c = this.people.get(id)
         if (c) {
             this.autoFit = false
+            this.focusedRoom = undefined
             this.cameras.main.setZoom(Math.max(this.fitZoom * 1.8, this.cameras.main.zoom))
             this.zoomFactor = this.cameras.main.zoom / this.fitZoom
             this.reportZoom()
@@ -471,6 +509,16 @@ export class OfficeScene extends Phaser.Scene {
                 this.avatarManager.release(c.member.id, c.member.avatar)
             }
             c.member = m
+            const compact = m.room === 'Commons'
+            if (c.name.getData('compact') !== compact) {
+                c.name.setData('compact', compact)
+                c.root.setScale(compact ? .84 : 1)
+                c.name.setStyle({
+                    fontSize: compact ? '12px' : '14px',
+                    backgroundColor: compact ? 'rgba(28,23,43,.62)' : '#13101e',
+                    padding: { x: compact ? 3 : 5, y: compact ? 2 : 3 }
+                })
+            }
             if (avatarChanged) {
                 this.loadAvatar(c, m)
             }

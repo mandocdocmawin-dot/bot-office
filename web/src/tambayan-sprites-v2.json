@@ -1,0 +1,112 @@
+{
+  "chair-se": {
+    "file": "/assets/tambayan/sprites-v2/chair-se.webp",
+    "width": 640,
+    "height": 591,
+    "bounds": {
+      "x": 75,
+      "y": 44,
+      "w": 490,
+      "h": 513
+    }
+  },
+  "chair-sw": {
+    "file": "/assets/tambayan/sprites-v2/chair-sw.webp",
+    "width": 640,
+    "height": 512,
+    "bounds": {
+      "x": 118,
+      "y": 32,
+      "w": 403,
+      "h": 446
+    }
+  },
+  "chair-ne": {
+    "file": "/assets/tambayan/sprites-v2/chair-ne.webp",
+    "width": 640,
+    "height": 533,
+    "bounds": {
+      "x": 132,
+      "y": 56,
+      "w": 413,
+      "h": 426
+    }
+  },
+  "chair-nw": {
+    "file": "/assets/tambayan/sprites-v2/chair-nw.webp",
+    "width": 640,
+    "height": 600,
+    "bounds": {
+      "x": 71,
+      "y": 53,
+      "w": 503,
+      "h": 514
+    }
+  },
+  "coffee-v2": {
+    "file": "/assets/tambayan/sprites-v2/coffee-v2.webp",
+    "width": 640,
+    "height": 427,
+    "bounds": {
+      "x": 165,
+      "y": 40,
+      "w": 335,
+      "h": 344
+    }
+  },
+  "board-v2": {
+    "file": "/assets/tambayan/sprites-v2/board-v2.webp",
+    "width": 640,
+    "height": 427,
+    "bounds": {
+      "x": 120,
+      "y": 40,
+      "w": 407,
+      "h": 360
+    }
+  },
+  "media-v2": {
+    "file": "/assets/tambayan/sprites-v2/media-v2.webp",
+    "width": 640,
+    "height": 384,
+    "bounds": {
+      "x": 120,
+      "y": 34,
+      "w": 399,
+      "h": 342
+    }
+  },
+  "kiosk-v2": {
+    "file": "/assets/tambayan/sprites-v2/kiosk-v2.webp",
+    "width": 640,
+    "height": 600,
+    "bounds": {
+      "x": 185,
+      "y": 76,
+      "w": 267,
+      "h": 467
+    }
+  },
+  "table-v2": {
+    "file": "/assets/tambayan/sprites-v2/table-v2.webp",
+    "width": 640,
+    "height": 427,
+    "bounds": {
+      "x": 168,
+      "y": 91,
+      "w": 306,
+      "h": 261
+    }
+  },
+  "plant-v2": {
+    "file": "/assets/tambayan/sprites-v2/plant-v2.webp",
+    "width": 640,
+    "height": 600,
+    "bounds": {
+      "x": 192,
+      "y": 57,
+      "w": 257,
+      "h": 488
+    }
+  }
+}

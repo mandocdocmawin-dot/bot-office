@@ -285,6 +285,7 @@ function office(user: Identity, mock: boolean) {
             button.onclick = () => {
                 selected = selected === room.name ? undefined : room.name
                 scene.select(selected)
+                if (selected === 'Commons') scene.focusRoom(selected)
                 renderRoster(true)
             }
             section.append(button)

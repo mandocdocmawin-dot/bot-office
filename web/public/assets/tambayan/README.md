@@ -1,11 +1,15 @@
-# Tambayan assets
+# Tambayan production assets, v2
 
-`design-reference.png` is the approved generated visual reference. It is not used as a flattened room backdrop.
+The approved visual reference is `design-reference.png`. It is not used as a flattened backdrop.
 
-`assets/` contains editable, transparent SVG props. The live Phaser scene loads the coffee station, notice board, media screen, game shelf and navigation kiosk through `web/src/tambayan-manifest.json` and `web/src/tambayan-props.ts`.
+`sprites-v2/` contains ten independent transparent WebP sprites: four armchair views, coffee counter with water dispenser, illuminated notice board, media console, orb kiosk, coffee table and plant. The built-in image generator produced the artwork using the approved room as style reference. Complete prompts and source provenance are saved in `output/tambayan/sprite-sources-v2.json`.
 
-The room itself, block plants, cyan rail posts, coffee tables and directional purple armchairs are drawn in `web/src/tambayan.ts` using the existing world projection. Chairs are added as independent Graphics objects with stable pod IDs: 12 initially, 18 for 11–16 members, 24 for 17+ members. Removal waits 60 seconds after the count falls. Layout is visual seating; it does not add a server Sit / Stand action. Above 24 members, the central walkway remains open rather than filling with additional furniture.
+`web/src/tambayan-sprites-v2.json` records each texture's canvas size and opaque artwork bounds. `web/src/tambayan-sprites.ts` places and scales these sprites from world-space ground anchors. Transparency is preserved; the assets are normalized to at most 640 pixels per edge and encoded with high-quality WebP. Each object is depth-sorted independently from avatars.
 
-Three 146 x 146 seating zones are reserved in `config.json`, including space for maximum chair capacity. Character navigation routes around the pods and fixed props. All four existing room doors remain connected by the central cross. Internal `Commons` identity is preserved for Discord mapping; the displayed name is Tambayan.
+`web/src/tambayan.ts` builds the room from these textures plus procedural lavender flooring, rounded gathering rugs, soft contact shadows, low walls and cyan rail posts. It uses the shared 0.86 / 0.60 world projection. Earlier SVG props remain in `assets/` for rollback; the live Tambayan no longer loads them.
 
-The SVG modular-chair is also available as an optional static prop; live seats use the more detailed procedural armchair renderer.
+The layout has three four-chair pods, twelve chairs total. Member count never changes chair size or packs more chairs around the tables. Counts above twelve show a standing-overflow indicator. Additional pods, room expansion and Sit / Stand require a later coordinated layout/server change. Current seating and amenity props are visual furnishings, not functional seat claims, announcements or synchronized media.
+
+Click the Tambayan title or choose Tambayan in People to focus the room. Fit returns to the complete office. Internal `Commons` identity and the surrounding rooms remain intact.
+
+Rebuild normalization with `node output/tambayan/prepare-sprites-v2.cjs`; it uses the local bundled Sharp library and generated source files recorded in the provenance manifest. Final WebP files are committed, so this step is not required for an ordinary build.

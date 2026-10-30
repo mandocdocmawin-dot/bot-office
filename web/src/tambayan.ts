@@ -2,135 +2,114 @@ import Phaser from 'phaser'
 import type { Member, RoomLayout } from '@office/shared/protocol'
 import { TAMBAYAN_PODS, TAMBAYAN_SEATS_PER_POD } from '@office/shared/rooms'
 import { corners, polygon, project, slab } from './isometric'
-import manifest from './tambayan-manifest.json'
-import { addProp, preloadProps } from './tambayan-props'
+import { preloadTambayanSprites, tambayanSprite, type TambayanSpriteId } from './tambayan-sprites'
 
-type Point3 = { x: number; y: number; z: number }
-const PURPLE = 0x8e60c1
-
-/** Movable low-poly objects, not a flattened room illustration. */
+/** The reference's three four-seat pods, assembled from independent alpha sprites. */
 export class Tambayan {
-    private chairs = new Map<string, Phaser.GameObjects.Graphics>()
+    private chairs = new Map<string, Phaser.GameObjects.Image>()
     private count = 0
     readonly capacity = TAMBAYAN_PODS.length * TAMBAYAN_SEATS_PER_POD
     private overflow: Phaser.GameObjects.Text
 
-    static preload(scene: Phaser.Scene) { preloadProps(scene, manifest, '/assets/tambayan/') }
+    static preload(scene: Phaser.Scene) { preloadTambayanSprites(scene) }
 
     constructor(private scene: Phaser.Scene, private room: RoomLayout) {
-        const { x, y, w, h } = room
-        const floor = scene.add.graphics().setDepth(2)
-        polygon(floor, corners(x + 8, y + 8, w - 16, h - 16), 0x56517d)
-        // Wide crossing stays usable from each of the existing doors.
-        polygon(floor, corners(x + w / 2 - 41, y + 8, 82, h - 16), 0x635b96, .62)
-        polygon(floor, corners(x + 8, y + 201, w - 16, 82), 0x635b96, .62)
-        polygon(floor, corners(x + w / 2 - 64, y + 178, 128, 128), 0x7063ab, .35)
+        this.floor()
+        const { x, y, h } = room
         for (const pod of TAMBAYAN_PODS) {
-            polygon(floor, corners(x + pod.x - 73, y + pod.y - 73, 146, 146), 0x8a78c2, .48)
-            this.table(x + pod.x, y + pod.y)
+            this.shadow(x + pod.x, y + pod.y, 61, .16)
+            tambayanSprite(scene, 'table-v2', x + pod.x, y + pod.y, 56, .23)
         }
-        const prop = (id: string, dx: number, dy: number) => {
-            const spec = manifest.find(item => item.id === id)!
-            addProp(scene, spec, x + dx, y + dy)
-        }
-        prop('coffee-station', 30, 65)
-        prop('notice-board', 130, 22)
-        prop('media-screen', 300, 22)
-        prop('navigation-kiosk', 469, 278)
-        prop('game-shelf', 27, 129)
-        for (const p of [[20, 20], [20, 187], [160, 22], [282, 22], [501, 20], [500, 190], [20, 418], [199, 416], [495, 418], [495, 330]]) {
-            this.plant(x + p[0], y + p[1])
+        this.shadow(x + 43, y + 119, 113, .2)
+        tambayanSprite(scene, 'coffee-v2', x + 43, y + 119, 112, .17)
+        this.shadow(x + 180, y + 28, 106, .14)
+        tambayanSprite(scene, 'board-v2', x + 180, y + 28, 104, .08)
+        this.shadow(x + 387, y + 25, 142, .16)
+        tambayanSprite(scene, 'media-v2', x + 387, y + 25, 144, .09)
+        tambayanSprite(scene, 'kiosk-v2', x + 477, y + 294, 35, .2)
+        for (const [dx, dy] of [[21, 23], [21, 190], [118, 22], [298, 22], [499, 23],
+            [499, 186], [22, 418], [196, 418], [495, 417], [496, 336]]) {
+            tambayanSprite(scene, 'plant-v2', x + dx, y + dy, 28, .21)
         }
         this.rails()
-        const status = project(x + 277, y + h - 15, 4)
+        const status = project(x + 277, y + h - 14, 4)
         this.overflow = scene.add.text(status.x, status.y, '', {
-            fontFamily: 'Arial', fontSize: '12px', color: '#e4d7ff', backgroundColor: '#252137',
+            fontFamily: 'Arial', fontSize: '11px', color: '#e4d7ff', backgroundColor: '#343047',
             padding: { x: 5, y: 3 }
         }).setOrigin(.5).setDepth(2999).setVisible(false)
         this.drawSeats()
     }
 
-    setMembers(members: Member[]) { this.count = members.filter(member => member.room === 'Commons').length }
+    setMembers(members: Member[]) {
+        const count = members.filter(member => member.room === 'Commons').length
+        if (count === this.count) return
+        this.count = count
+        // Standing space is honest overflow; extra furniture needs its own floor area.
+        this.overflow.setText(`${Math.max(0, count - this.capacity)} standing · ${this.capacity} seats`)
+            .setVisible(count > this.capacity)
+    }
 
-    update(_now: number) {
-        // Overflow remains standing space until a separate pod area is designed.
-        // Never shrink chairs or fill the center crossing as membership grows.
-        this.overflow.setText(`${Math.max(0, this.count - this.capacity)} standing · ${this.capacity} seats`)
-            .setVisible(this.count > this.capacity)
+    private floor() {
+        const { x, y, w, h } = this.room
+        const g = this.scene.add.graphics().setDepth(2)
+        polygon(g, corners(x + 5, y + 5, w - 10, h - 10), 0x56517d)
+        for (let i = 0; i < 24; i++) {
+            polygon(g, corners(x + 8 + i * (w - 16) / 24, y + 8, (w - 16) / 24 + .2, h - 16),
+                0x9d8fd0, .055 * Math.sin((i / 24) * Math.PI))
+        }
+        this.roundedFloor(g, x + w / 2 - 38, y + 6, 76, h - 12, 11, 0x8175bb, .4)
+        this.roundedFloor(g, x + 6, y + 204, w - 12, 76, 11, 0x8175bb, .4)
+        this.roundedFloor(g, x + w / 2 - 57, y + 185, 114, 114, 14, 0x8175bb, .2)
+        for (const pod of TAMBAYAN_PODS) {
+            this.roundedFloor(g, x + pod.x - 73, y + pod.y - 73, 146, 146, 12, 0x9986d0, .48)
+        }
+    }
+
+    private roundedFloor(g: Phaser.GameObjects.Graphics, x: number, y: number,
+        w: number, h: number, radius: number, color: number, alpha: number) {
+        const points: { x: number; y: number }[] = []
+        for (const [cx, cy, start] of [[x + w - radius, y + radius, -Math.PI / 2],
+            [x + w - radius, y + h - radius, 0], [x + radius, y + h - radius, Math.PI / 2],
+            [x + radius, y + radius, Math.PI]]) {
+            for (let i = 0; i <= 6; i++) {
+                const angle = start + i * Math.PI / 12
+                points.push(project(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius))
+            }
+        }
+        polygon(g, points, color, alpha)
+    }
+
+    private shadow(x: number, y: number, width: number, alpha: number) {
+        const key = 'tambayan-contact-shadow-v2'
+        if (!this.scene.textures.exists(key)) {
+            const texture = this.scene.textures.createCanvas(key, 128, 64)!
+            const ctx = texture.context
+            ctx.scale(1, .5)
+            const gradient = ctx.createRadialGradient(64, 64, 8, 64, 64, 62)
+            gradient.addColorStop(0, 'rgba(12,8,28,.8)')
+            gradient.addColorStop(.55, 'rgba(12,8,28,.3)')
+            gradient.addColorStop(1, 'rgba(12,8,28,0)')
+            ctx.fillStyle = gradient
+            ctx.fillRect(0, 0, 128, 128)
+            texture.refresh()
+        }
+        const ground = project(x + 3, y + 5)
+        this.scene.add.image(ground.x, ground.y + 3, key).setDisplaySize(width, width * .48)
+            .setAlpha(alpha).setDepth(5)
     }
 
     private drawSeats() {
-        const desired = new Set<string>()
+        const views: TambayanSpriteId[] = ['chair-nw', 'chair-ne', 'chair-se', 'chair-sw']
         const angles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5]
         for (let podIndex = 0; podIndex < TAMBAYAN_PODS.length; podIndex++) {
             const pod = TAMBAYAN_PODS[podIndex]
             for (let i = 0; i < TAMBAYAN_SEATS_PER_POD; i++) {
-                const id = `${podIndex}:${i}`
-                desired.add(id)
-                if (this.chairs.has(id)) continue
-                const a = angles[i]
-                this.chairs.set(id, this.armchair(this.room.x + pod.x + Math.cos(a) * 53,
-                    this.room.y + pod.y + Math.sin(a) * 53, a - Math.PI / 2))
+                const x = this.room.x + pod.x + Math.cos(angles[i]) * 53
+                const y = this.room.y + pod.y + Math.sin(angles[i]) * 53
+                this.shadow(x, y, 49, .12)
+                const chair = tambayanSprite(this.scene, views[i], x, y, 51, .22)
+                this.chairs.set(`${podIndex}:${i}`, chair)
             }
-        }
-        for (const [id, chair] of this.chairs) {
-            if (!desired.has(id)) { chair.destroy(); this.chairs.delete(id) }
-        }
-    }
-
-    private armchair(x: number, y: number, angle: number) {
-        const g = this.scene.add.graphics().setDepth(1000 + project(x, y).y)
-        g.setData('ground', project(x, y))
-        const transform = (p: Point3) => ({
-            x: x + p.x * Math.cos(angle) - p.y * Math.sin(angle),
-            y: y + p.x * Math.sin(angle) + p.y * Math.cos(angle), z: p.z
-        })
-        const faces: { points: Point3[]; color: number; depth: number }[] = []
-        const box = (bx: number, by: number, w: number, h: number, z: number, t: number, color: number) => {
-            const top = [{ x: bx, y: by, z }, { x: bx + w, y: by, z }, { x: bx + w, y: by + h, z }, { x: bx, y: by + h, z }].map(transform)
-            const bottom = top.map(p => ({ ...p, z: p.z - t }))
-            for (let i = 0; i < 4; i++) {
-                const j = (i + 1) % 4
-                const points = [top[i], top[j], bottom[j], bottom[i]]
-                const shade = Phaser.Display.Color.IntegerToColor(color).darken(i % 2 ? 29 : 17).color
-                faces.push({ points, color: shade, depth: points.reduce((s, p) => s + p.x + p.y + p.z * .04, 0) / 4 })
-            }
-            faces.push({ points: top, color, depth: top.reduce((s, p) => s + p.x + p.y + p.z * .04, 0) / 4 + .01 })
-        }
-        const shadow = project(x + 4, y + 4)
-        g.fillStyle(0x181527, .3).fillEllipse(shadow.x, shadow.y + 5, 52, 24)
-        for (const bx of [-13, 9]) for (const by of [-13, 9]) box(bx, by, 4, 4, 8, 8, 0x292532)
-        box(-17, -17, 34, 34, 17, 10, 0x64408e)
-        box(-12, -11, 24, 26, 22, 6, PURPLE)
-        box(-17, -17, 34, 7, 43, 26, 0x9164c7)
-        box(-18, -11, 6, 29, 29, 15, 0x986cc9)
-        box(12, -11, 6, 29, 29, 15, 0x986cc9)
-        // Soft square pillow, folded into two distinct lit faces.
-        const pillow = [transform({ x: -8, y: -9, z: 35 }), transform({ x: 7, y: -9, z: 35 }),
-            transform({ x: 7, y: -2, z: 23 }), transform({ x: -8, y: -2, z: 23 })]
-        faces.push({ points: pillow, color: 0xbb86eb, depth: x + y + 6 })
-        faces.sort((a, b) => a.depth - b.depth)
-        for (const face of faces) polygon(g, face.points.map(p => project(p.x, p.y, p.z)), face.color)
-        return g
-    }
-
-    private table(x: number, y: number) {
-        const g = this.scene.add.graphics().setDepth(1000 + project(x + 10, y + 10).y)
-        for (const dx of [-16, 12]) for (const dy of [-16, 12]) slab(g, x + dx, y + dy, 4, 4, 20, 20, 0x40333a)
-        slab(g, x - 21, y - 21, 42, 42, 26, 6, 0xad8968)
-        slab(g, x + 7, y - 11, 10, 14, 29, 3, 0x627c94)
-        slab(g, x + 6, y - 12, 10, 14, 31, 2, 0x9c80c1)
-        this.plant(x - 7, y - 4, true, 27)
-    }
-
-    private plant(x: number, y: number, small = false, z = 0) {
-        const s = small ? .45 : 1
-        const g = this.scene.add.graphics().setDepth(1000 + project(x + 5, y + 5).y)
-        slab(g, x - 10 * s, y - 10 * s, 20 * s, 20 * s, z + 18 * s, 18 * s, 0x99714d)
-        slab(g, x - 8 * s, y - 8 * s, 16 * s, 16 * s, z + 19 * s, 2 * s, 0x473e39)
-        slab(g, x - 2 * s, y - 2 * s, 4 * s, 4 * s, z + 38 * s, 20 * s, 0x678545)
-        for (const [dx, dy, height] of [[-7, 0, 36], [4, 3, 41], [-1, -6, 48], [-8, -5, 48], [3, -6, 55]]) {
-            slab(g, x + dx * s - 5 * s, y + dy * s - 5 * s, 12 * s, 12 * s, z + height * s, 6 * s, height % 2 ? 0x99ce73 : 0x72b660)
         }
     }
 
@@ -142,14 +121,20 @@ export class Tambayan {
             [w, 0, w, 210], [w, 274, w, h], [0, h, 230, h], [294, h, w, h]
         ]
         for (const [ax, ay, bx, by] of segments) {
+            const wall = this.scene.add.graphics().setDepth(4)
+            slab(wall, x + ax - 2, y + ay - 2, Math.max(4, bx - ax), Math.max(4, by - ay), 20, 20, 0x45415d)
             const a = project(x + ax, y + ay, 24), b = project(x + bx, y + by, 24)
-            g.lineStyle(7, 0x78e6e2, .1).lineBetween(a.x, a.y, b.x, b.y)
-            g.lineStyle(2.5, 0xa2f4ee, .95).lineBetween(a.x, a.y, b.x, b.y)
+            g.lineStyle(9, 0x6fe4ea, .035).lineBetween(a.x, a.y, b.x, b.y)
+            g.lineStyle(5, 0x6fe4ea, .1).lineBetween(a.x, a.y, b.x, b.y)
+            g.lineStyle(2.2, 0xb1f8f1, .95).lineBetween(a.x, a.y, b.x, b.y)
         }
-        for (const [dx, dy] of [[0, 0], [w, 0], [w, h], [0, h], [230, 0], [294, 0], [0, 210], [0, 274], [w, 210], [w, 274], [230, h], [294, h]]) {
+        for (const [dx, dy] of [[0, 0], [w, 0], [w, h], [0, h], [230, 0], [294, 0],
+            [0, 210], [0, 274], [w, 210], [w, 274], [230, h], [294, h]]) {
             const post = this.scene.add.graphics().setDepth(1000 + project(x + dx, y + dy).y)
-            slab(post, x + dx - 6, y + dy - 6, 12, 12, 31, 31, 0x49415e)
-            slab(post, x + dx - 8, y + dy - 8, 16, 16, 33, 3, 0x84729f)
+            slab(post, x + dx - 7, y + dy - 7, 14, 14, 5, 5, 0x2e2b40)
+            slab(post, x + dx - 6, y + dy - 6, 12, 12, 32, 28, 0x51476c)
+            slab(post, x + dx - 8, y + dy - 8, 16, 16, 34, 3, 0x8e7baa)
+            slab(post, x + dx - 6, y + dy - 6, 12, 12, 35, 1, 0xa490c3)
         }
     }
 }
