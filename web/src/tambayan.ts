@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { Member, RoomLayout } from '@office/shared/protocol'
-import { TAMBAYAN_PODS, tambayanCapacity } from '@office/shared/rooms'
+import { TAMBAYAN_PODS, TAMBAYAN_SEATS_PER_POD } from '@office/shared/rooms'
 import { corners, polygon, project, slab } from './isometric'
 import manifest from './tambayan-manifest.json'
 import { addProp, preloadProps } from './tambayan-props'
@@ -12,9 +12,7 @@ const PURPLE = 0x8e60c1
 export class Tambayan {
     private chairs = new Map<string, Phaser.GameObjects.Graphics>()
     private count = 0
-    private capacity = 12
-    private lowSince: number | undefined
-    private nextCheck = 0
+    readonly capacity = TAMBAYAN_PODS.length * TAMBAYAN_SEATS_PER_POD
     private overflow: Phaser.GameObjects.Text
 
     static preload(scene: Phaser.Scene) { preloadProps(scene, manifest, '/assets/tambayan/') }
@@ -22,13 +20,13 @@ export class Tambayan {
     constructor(private scene: Phaser.Scene, private room: RoomLayout) {
         const { x, y, w, h } = room
         const floor = scene.add.graphics().setDepth(2)
-        polygon(floor, corners(x + 8, y + 8, w - 16, h - 16), 0x49446f)
+        polygon(floor, corners(x + 8, y + 8, w - 16, h - 16), 0x56517d)
         // Wide crossing stays usable from each of the existing doors.
         polygon(floor, corners(x + w / 2 - 41, y + 8, 82, h - 16), 0x635b96, .62)
         polygon(floor, corners(x + 8, y + 201, w - 16, 82), 0x635b96, .62)
         polygon(floor, corners(x + w / 2 - 64, y + 178, 128, 128), 0x7063ab, .35)
         for (const pod of TAMBAYAN_PODS) {
-            polygon(floor, corners(x + pod.x - 73, y + pod.y - 73, 146, 146), 0x8170be, .52)
+            polygon(floor, corners(x + pod.x - 73, y + pod.y - 73, 146, 146), 0x8a78c2, .48)
             this.table(x + pod.x, y + pod.y)
         }
         const prop = (id: string, dx: number, dy: number) => {
@@ -54,29 +52,19 @@ export class Tambayan {
 
     setMembers(members: Member[]) { this.count = members.filter(member => member.room === 'Commons').length }
 
-    update(now: number) {
-        if (now < this.nextCheck) return
-        this.nextCheck = now + 500
-        const target = tambayanCapacity(this.count)
-        if (target >= this.capacity) {
-            this.lowSince = undefined
-            if (target !== this.capacity) { this.capacity = target; this.drawSeats() }
-        } else {
-            this.lowSince ??= now
-            if (now - this.lowSince >= 60_000) {
-                this.capacity = target; this.lowSince = undefined; this.drawSeats()
-            }
-        }
-        this.overflow.setText(`${Math.max(0, this.count - 24)} standing · 24 seats`).setVisible(this.count > 24)
+    update(_now: number) {
+        // Overflow remains standing space until a separate pod area is designed.
+        // Never shrink chairs or fill the center crossing as membership grows.
+        this.overflow.setText(`${Math.max(0, this.count - this.capacity)} standing · ${this.capacity} seats`)
+            .setVisible(this.count > this.capacity)
     }
 
     private drawSeats() {
         const desired = new Set<string>()
-        // Four cardinal seats first; diagonals extend each pod to six/eight.
-        const angles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5, Math.PI / 4, Math.PI * 1.25, Math.PI * .75, Math.PI * 1.75]
+        const angles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5]
         for (let podIndex = 0; podIndex < TAMBAYAN_PODS.length; podIndex++) {
             const pod = TAMBAYAN_PODS[podIndex]
-            for (let i = 0; i < this.capacity / 3; i++) {
+            for (let i = 0; i < TAMBAYAN_SEATS_PER_POD; i++) {
                 const id = `${podIndex}:${i}`
                 desired.add(id)
                 if (this.chairs.has(id)) continue
@@ -87,12 +75,6 @@ export class Tambayan {
         }
         for (const [id, chair] of this.chairs) {
             if (!desired.has(id)) { chair.destroy(); this.chairs.delete(id) }
-            else {
-                // Compact armchairs keep the eight-seat pods from crowding the table.
-                const scale = this.capacity === 24 ? .76 : this.capacity === 18 ? .87 : 1
-                const anchor = chair.getData('ground') as { x: number; y: number }
-                chair.setScale(scale).setPosition(anchor.x * (1 - scale), anchor.y * (1 - scale))
-            }
         }
     }
 

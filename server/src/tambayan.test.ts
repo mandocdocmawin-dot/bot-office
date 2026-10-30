@@ -1,6 +1,6 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
-import { TAMBAYAN_PODS, roomDisplayName, tambayanCapacity } from '@office/shared/rooms'
+import { TAMBAYAN_PODS, roomDisplayName } from '@office/shared/rooms'
 import { loadConfig } from './config.js'
 import { World } from './world.js'
 
@@ -23,13 +23,4 @@ test('Tambayan retains Commons identity and leaves a clear cross through all fou
     for (const pod of TAMBAYAN_PODS) {
         assert.equal(world.walkable(room.x + pod.x, room.y + pod.y), false, 'Tables and seating pods reserve collision space')
     }
-})
-
-test('Tambayan seating grows in complete pods and caps at 24', () => {
-    assert.equal(tambayanCapacity(0), 12)
-    assert.equal(tambayanCapacity(10), 12)
-    assert.equal(tambayanCapacity(11), 18)
-    assert.equal(tambayanCapacity(16), 18)
-    assert.equal(tambayanCapacity(17), 24)
-    assert.equal(tambayanCapacity(200), 24)
 })
