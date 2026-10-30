@@ -40,6 +40,7 @@ export interface Member extends Identity, Point {
     room: Room
     sleeping: boolean
     moving: boolean
+    seatId?: string
     source?: 'discord'
     presence?: 'online' | 'idle' | 'dnd' | 'offline'
     inVoice?: boolean
@@ -79,6 +80,8 @@ export interface Snapshot {
 }
 
 export type ClientPacket =
+    | { type: 'sit'; seatId?: string }
+    | { type: 'stand' }
     | { type: 'character'; style: CharacterStyle }
     | { type: 'input'; dx: number; dy: number }
     | { type: 'move_to'; x: number; y: number }

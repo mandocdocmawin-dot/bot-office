@@ -18,6 +18,10 @@ import { isCharacterStyle } from './protocol.js'
 export function parsePacket(raw: string): ClientPacket | undefined {
     try {
         const p = JSON.parse(raw)
+        if (p.type === 'stand') return { type: 'stand' }
+        if (p.type === 'sit' && (p.seatId === undefined || (typeof p.seatId === 'string' && /^[0-2]:[0-3]$/.test(p.seatId)))) {
+            return { type: 'sit', ...(p.seatId ? { seatId: p.seatId } : {}) }
+        }
         if (!p || typeof p !== 'object') {
             return
         }

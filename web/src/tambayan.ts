@@ -3,6 +3,7 @@ import type { Member, RoomLayout } from '@office/shared/protocol'
 import { TAMBAYAN_PODS, TAMBAYAN_SEATS_PER_POD, TAMBAYAN_PROPS, TAMBAYAN_PLANTS, tambayanSeats } from '@office/shared/rooms'
 import { corners, polygon, project, slab } from './isometric'
 import { preloadTambayanSprites, tambayanSprite, type TambayanSpriteId } from './tambayan-sprites'
+import { eventBus } from './events'
 
 /** The reference's three four-seat pods, assembled from independent alpha sprites. */
 export class Tambayan {
@@ -98,10 +99,16 @@ export class Tambayan {
     }
 
     private drawSeats() {
-        const views: TambayanSpriteId[] = ['chair-nw', 'chair-ne', 'chair-se', 'chair-sw']
+        // Actual rear artwork faces opposite to the original exported compass labels.
+        const views: TambayanSpriteId[] = ['chair-ne', 'chair-nw', 'chair-se', 'chair-sw']
         for (const seat of tambayanSeats(this.room)) {
             this.shadow(seat.x, seat.y, 49, .12)
             const chair = tambayanSprite(this.scene, views[seat.index], seat.x, seat.y, 58, .22)
+            chair.setInteractive({ useHandCursor: true, pixelPerfect: true, alphaTolerance: 96 })
+                .on('pointerup', (_pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
+                    event.stopPropagation()
+                    eventBus.emitEvent('office:sit', seat.id)
+                })
             this.chairs.set(seat.id, chair)
         }
     }

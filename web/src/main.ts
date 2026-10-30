@@ -491,6 +491,13 @@ function office(user: Identity, mock: boolean) {
     eventBus.onEvent('office:zoom', ({ zoom }) => {
         el('zoom-value').textContent = `${zoom}%`
     })
+    eventBus.onEvent('office:sit', seatId => {
+        if (!chatVisible && !panelOpen() && !discordControlled()) {
+            keys.clear()
+            const own = snapshot?.members.find(member => member.id === selfId)
+            send(own?.seatId === seatId ? { type: 'stand' } : { type: 'sit', seatId })
+        }
+    })
     window.addEventListener('pointerdown', activitySignal)
     window.addEventListener('wheel', activitySignal, { passive: true })
     window.addEventListener('keydown', activitySignal)

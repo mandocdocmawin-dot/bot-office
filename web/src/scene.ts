@@ -7,12 +7,14 @@ import { colorCSS, doors, roomDisplayName, rooms } from './rooms'
 import { Furnishing, corners, polygon, project, slab, unproject } from './isometric'
 import { fitWorldViewport } from './viewport-fit'
 import { Tambayan } from './tambayan'
+import { tambayanSeats } from '@office/shared/rooms'
 
 interface Character {
     root: Phaser.GameObjects.Container
     body: Phaser.GameObjects.Container
     name: Phaser.GameObjects.Text
     status: Phaser.GameObjects.Arc
+    shadow: Phaser.GameObjects.Ellipse
     bubble?: Phaser.GameObjects.Container | Phaser.GameObjects.DOMElement
     zzz: Phaser.GameObjects.Text
     member: Member
@@ -54,6 +56,7 @@ export class OfficeScene extends Phaser.Scene {
     private lastUpdate = 0
     private avatarManager!: AvatarTextureManager
     private tambayan?: Tambayan
+    private seats = new Map(tambayanSeats(rooms.find(room => room.name === 'Commons')!).map(seat => [seat.id, seat]))
     constructor() {
         super('office')
     }
@@ -320,14 +323,17 @@ export class OfficeScene extends Phaser.Scene {
                 }
             }
             const travelled = Math.hypot(c.root.x - previousX, c.root.y - previousY)
-            const targetDepth = (c.bubble ? 4000 : 1000) + Math.round(c.root.y)
+            const seat = c.member.seatId ? this.seats.get(c.member.seatId) : undefined
+            c.name.setVisible(!seat || !c.bubble)
+            const targetDepth = seat ? 1000 + project(seat.x, seat.y).y + (seat.index < 2 ? -2 : 2)
+                : (c.bubble ? 4000 : 1000) + Math.round(c.root.y)
             if (c.depth !== targetDepth) {
                 c.root.setDepth(targetDepth)
                 c.depth = targetDepth
             }
             // Follow the rendered movement, including interpolation after a stop packet.
             // Distance-driven steps stay in sync at different speeds and frame rates.
-            const walking = !this.frozen && (c.member.moving || travelled > 0.03)
+            const walking = !seat && !this.frozen && (c.member.moving || travelled > 0.03)
             if (walking || c.walkPhase !== 0) {
                 c.walkPhase = walking ? (c.walkPhase + (Math.min(travelled, 12) * Math.PI) / 19) % (Math.PI * 2) : 0
                 const stride = Math.sin(c.walkPhase) * (this.reducedMotion.matches ? 0.35 : 1)
@@ -360,6 +366,20 @@ export class OfficeScene extends Phaser.Scene {
             } else if (!walking) {
                 c.body.y = 0
                 c.body.angle = 0
+            }
+            if (seat) {
+                c.walkPhase = 0
+                c.body.setPosition(0, -6).setAngle(0)
+                const bend = seat.index === 0 || seat.index === 3 ? 65 : -65
+                c.legs[0].setPosition(-6, -17).setAngle(bend)
+                c.legs[1].setPosition(7, -17).setAngle(bend)
+                c.arms[0].setAngle(-8)
+                c.arms[1].setAngle(8)
+            } else if (!walking) {
+                c.legs[0].setPosition(-6, -16).setAngle(0)
+                c.legs[1].setPosition(7, -16).setAngle(0)
+                c.arms[0].setAngle(0)
+                c.arms[1].setAngle(0)
             }
         }
     }
@@ -533,6 +553,7 @@ export class OfficeScene extends Phaser.Scene {
             const m = state.members[i]
             const target = project(m.x, m.y)
             let c = this.people.get(m.id)
+            if (c && m.seatId && c.member.seatId !== m.seatId) c.root.setPosition(target.x, target.y)
             if (c && c.member.character !== m.character) {
                 this.avatarManager.release(c.member.id, c.member.avatar)
                 const current = { x: c.root.x, y: c.root.y }
@@ -556,6 +577,9 @@ export class OfficeScene extends Phaser.Scene {
                 this.avatarManager.release(c.member.id, c.member.avatar)
             }
             c.member = m
+            c.name.setY(m.seatId ? -87 : 12)
+            c.shadow.setVisible(!m.seatId)
+            c.voiceName.setY(m.seatId ? 43 : 34)
             const compact = m.room === 'Commons'
             if (c.name.getData('compact') !== compact) {
                 c.name.setData('compact', compact)
@@ -690,6 +714,7 @@ export class OfficeScene extends Phaser.Scene {
         body.add([voiceRing, ...legs, arms[0], person, arms[1], head, robotHead, initial, status])
         root.add([shadow, body, name, zzz, voiceName, talk])
         const c: Character = {
+            shadow,
             root,
             body,
             name,

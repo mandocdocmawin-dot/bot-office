@@ -12,6 +12,7 @@ import type {
 import { World } from './world.js'
 import { isMediaUrl } from './media.js'
 import { isCharacterStyle, type CharacterStyle } from './protocol.js'
+import { SocialMovement } from './social.js'
 
 interface Player extends Member {
     lastInput: number
@@ -29,6 +30,7 @@ export class Office {
     private characters = new Map<string, CharacterStyle>()
     members = new Map<string, Player>()
     world: World
+    private social: SocialMovement
     discord: DiscordStatus = { state: 'disabled', detail: 'Discord activity is disabled.' }
     voiceMonitor: VoiceMonitorStatus = {
         state: 'disabled',
@@ -42,6 +44,7 @@ export class Office {
         private now = () => Date.now()
     ) {
         this.world = new World(config)
+        this.social = new SocialMovement(this.world, config.rooms.find(room => room.name === 'Commons')!, this.members, this.now)
     }
     snapshot(): Snapshot {
         return {
@@ -71,7 +74,8 @@ export class Office {
                         voiceChannelId,
                         voiceChannelName,
                         muted,
-                        speaking
+                        speaking,
+                        seatId
                     }) => ({
                         id,
                         username,
@@ -82,6 +86,7 @@ export class Office {
                         room,
                         sleeping,
                         moving,
+                        ...(seatId ? { seatId } : {}),
                         ...(source ? { source, presence } : {}),
                         ...(inVoice === undefined
                             ? {}
@@ -106,6 +111,7 @@ export class Office {
             Object.assign(old, identity)
             return
         }
+        if (old) this.social.cancel(old)
         const position = old ??
             restore ?? {
                 ...this.world.spawn('Front Office', this.members.size),
@@ -134,11 +140,14 @@ export class Office {
     leave(id: string) {
         const player = this.members.get(id)
         if (player?.source !== 'discord') {
+            if (player) this.social.cancel(player)
             this.members.delete(id)
         }
         return player
     }
     forgetDiscordMember(id: string) {
+        const player = this.members.get(id)
+        if (player) this.social.cancel(player)
         this.activity.delete(id)
         this.members.delete(id)
     }
@@ -159,6 +168,7 @@ export class Office {
         }
     }
     private route(p: Player, room: Room) {
+        this.social.cancel(p)
         const target = this.world.spawn(room, [...this.members.keys()].indexOf(p.id))
         p.path = this.world.path(p, target)
         p.dx = p.dy = 0
@@ -172,15 +182,18 @@ export class Office {
             p.room = room
         }
     }
-    discordMessage(id: string, room: Room, content?: string) {
+    discordMessage(id: string, room: Room, content?: string, mentionedIds: readonly string[] = []) {
         const p = this.members.get(id)
         const a = this.activity.get(id)
         if (!p || !a) {
             return
         }
         a.lastActivity = this.now()
-        a.returnAt = a.voiceRoom ? null : this.now() + (this.config.discord?.message_stay_ms ?? 120_000)
-        this.route(p, a.voiceRoom ?? room)
+        a.returnAt = a.voiceRoom || room === 'Commons' ? null : this.now() + (this.config.discord?.message_stay_ms ?? 120_000)
+        const destination = a.voiceRoom ?? room
+        const mention = this.social.mentioned(p, content, mentionedIds)
+        if (!(mention && this.social.approach(p, mention)) &&
+            !(destination === 'Commons' && this.social.sit(p))) this.route(p, destination)
         // Snippets exist only in this call and the live WebSocket packet.
         if (
             this.config.bubble_enabled &&
@@ -250,6 +263,13 @@ export class Office {
         }
         const changed = p.presence !== presence
         p.presence = presence
+        if (presence === 'offline') {
+            this.social.cancel(p)
+            p.path = []
+            p.dx = p.dy = 0
+            p.inputUntil = 0
+            p.moving = false
+        }
         const a = this.activity.get(id)
         if (a && changed && presence !== 'offline') {
             a.lastActivity = this.now()
@@ -280,6 +300,13 @@ export class Office {
         }
         p.lastInput = this.now()
         p.sleeping = false
+        if (packet.type === 'sit' || packet.type === 'stand') {
+            if (activity) activity.returnAt = null
+            if (packet.type === 'sit') this.social.sit(p, packet.seatId)
+            else { this.social.cancel(p); p.path = []; p.dx = p.dy = 0 }
+            return
+        }
+        if (movement) this.social.cancel(p)
         if (packet.type === 'input') {
             const magnitude = Math.max(1, Math.hypot(packet.dx, packet.dy))
             p.dx = packet.dx / magnitude
@@ -321,6 +348,10 @@ export class Office {
             if (text && this.config.bubble_enabled) {
                 this.bubble(id, p.room, text)
             }
+            if (packet.type === 'chat' && text && p.room === 'Commons') {
+                const mention = this.social.mentioned(p, packet.text)
+                if (!(mention && this.social.approach(p, mention))) this.social.sit(p)
+            }
         }
     }
     tick(seconds: number) {
@@ -335,6 +366,7 @@ export class Office {
             const lastInput = activity?.lastActivity ?? p.lastInput
             if (!activity?.voiceRoom && this.now() - lastInput >= this.config.idle_timeout_ms) {
                 if (!p.sleeping) {
+                    this.social.cancel(p)
                     Object.assign(p, this.world.spawn('Nap Room', [...this.members.keys()].indexOf(p.id)))
                     p.room = 'Nap Room'
                     p.sleeping = true
@@ -344,6 +376,8 @@ export class Office {
                 p.moving = false
                 continue
             }
+            this.social.tick(p)
+            if (p.seatId) { p.moving = false; continue }
             let dx = this.now() <= p.inputUntil ? p.dx : 0
             let dy = this.now() <= p.inputUntil ? p.dy : 0
             if (p.path.length > 0) {

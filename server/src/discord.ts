@@ -129,7 +129,8 @@ export function startDiscord(
                 { id: message.channelId, name: 'name' in message.channel ? message.channel.name : '' },
                 parent
             ),
-            settings.message_previews ? extractMediaContent(message) : undefined
+            settings.message_previews ? extractMediaContent(message) : undefined,
+            [...message.mentions.users.keys()]
         )
     })
     client.on(Events.MessageUpdate, (oldMessage, newMessage) => {
@@ -151,7 +152,8 @@ export function startDiscord(
                     { id: newMessage.channelId, name: 'name' in newMessage.channel ? newMessage.channel.name : '' },
                     parent
                 ),
-                settings.message_previews ? newContent : undefined
+                settings.message_previews ? newContent : undefined,
+                [...newMessage.mentions.users.keys()]
             )
         }
     })

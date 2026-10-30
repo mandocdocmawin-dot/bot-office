@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 
 export interface OfficeEvents {
     'office:move': (point: { x: number; y: number }) => void
+    'office:sit': (seatId: string) => void
     'office:zoom': (data: { zoom: number }) => void
 }
 
